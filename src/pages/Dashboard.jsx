@@ -4,7 +4,6 @@ import { renk, font } from '../styles'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import Students from './Students'
 import ExamEntry from './ExamEntry'
-import DailyStudy from './DailyStudy'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe' },
@@ -40,7 +39,6 @@ export default function Dashboard({ session }) {
           { key: 'dashboard', label: 'Dashboard', icon: '📊' },
           { key: 'students', label: 'Öğrenciler', icon: '👥' },
           { key: 'exams', label: 'Deneme Gir', icon: '📝' },
-          { key: 'daily', label: 'Günlük Çalışma', icon: '📅' },
         ].map(m => (
           <button key={m.key} onClick={() => setPage(m.key)} style={{
             display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: 'none', borderRadius: '10px', cursor: 'pointer',
@@ -62,7 +60,6 @@ export default function Dashboard({ session }) {
         {page === 'dashboard' && <DashboardHome />}
         {page === 'students' && <Students />}
         {page === 'exams' && <ExamEntry />}
-        {page === 'daily' && <DailyStudy session={session} />}
       </div>
     </div>
   )
@@ -109,7 +106,6 @@ function DashboardHome() {
       })
     }
 
-    // Tüm denemeler için trend verileri
     const allExamResults = []
     for (const exam of exams) {
       const { data: examResults } = await supabase.from('exam_results').select('*').eq('exam_id', exam.id)
@@ -118,13 +114,11 @@ function DashboardHome() {
       }
     }
 
-    // Toplam net trendi
     const trendData = allExamResults.map(({ exam, results }) => ({
       name: exam.name,
       ortalama: parseFloat((results.map(r => toplamNet(r)).reduce((a, b) => a + b, 0) / results.length).toFixed(2))
     }))
 
-    // Branş bazlı trend verileri
     const bransTrend = DERSLER.map(d => ({
       label: d.label,
       key: d.key,
@@ -159,7 +153,6 @@ function DashboardHome() {
         Son deneme: <strong style={{ color: renk.primary }}>{stats.sonDeneme.name}</strong> ({stats.sonDeneme.date})
       </p>
 
-      {/* Özet kartlar */}
       <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '32px' }}>
         {[
           { label: 'Sınıf Ortalaması', value: stats.ortalama, bg: renk.primaryLight, color: renk.primary, icon: '📊' },
@@ -174,7 +167,6 @@ function DashboardHome() {
         ))}
       </div>
 
-      {/* Toplam net trend */}
       {stats.trendData.length > 1 && (
         <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, padding: '24px', marginBottom: '32px' }}>
           <h3 style={{ color: renk.gray800, marginBottom: '20px' }}>Sınıf Ortalaması Trendi</h3>
@@ -190,7 +182,6 @@ function DashboardHome() {
         </div>
       )}
 
-      {/* Branş ortalamaları bar */}
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, padding: '24px', marginBottom: '32px' }}>
         <h3 style={{ color: renk.gray800, marginBottom: '20px' }}>Son Denemede Branş Ortalamaları</h3>
         <ResponsiveContainer width="100%" height={220}>
@@ -204,7 +195,6 @@ function DashboardHome() {
         </ResponsiveContainer>
       </div>
 
-      {/* Branş bazlı trend grafikleri */}
       {stats.bransTrend[0].data.length > 1 && (
         <>
           <h3 style={{ color: renk.gray800, marginBottom: '20px' }}>Branş Bazlı Gelişim Trendi</h3>
@@ -227,7 +217,6 @@ function DashboardHome() {
         </>
       )}
 
-      {/* Öğrenci sıralaması */}
       <h3 style={{ color: renk.gray800, marginBottom: '16px' }}>Öğrenci Sıralaması</h3>
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '500px', marginBottom: '32px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -252,7 +241,6 @@ function DashboardHome() {
         </table>
       </div>
 
-      {/* Değişim tablosu */}
       {stats.degisimler.filter(d => d.isim).length > 0 && (
         <>
           <h3 style={{ color: renk.gray800, marginBottom: '16px' }}>Önceki Denemeye Göre Değişim</h3>
