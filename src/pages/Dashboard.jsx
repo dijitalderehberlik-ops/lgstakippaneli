@@ -4,6 +4,7 @@ import { renk, font } from '../styles'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import Students from './Students'
 import ExamEntry from './ExamEntry'
+import StudentDetail from './StudentDetail'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe', maxSoru: 20 },
@@ -21,11 +22,14 @@ function toplamNet(result) {
 
 export default function Dashboard({ session }) {
   const [page, setPage] = useState('dashboard')
+  const [selectedStudentId, setSelectedStudentId] = useState(null)
+
   async function handleLogout() { await supabase.auth.signOut() }
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: font.family, background: renk.gray50 }}>
-      <div style={{ width: '220px', background: renk.white, padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '4px', borderRight: `1px solid ${renk.gray200}`, boxShadow: '2px 0 8px rgba(0,0,0,0.04)' }}>
+      {/* Sol menü */}
+      <div style={{ width: '220px', background: renk.white, padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '4px', borderRight: `1px solid ${renk.gray200}`, boxShadow: '2px 0 8px rgba(0,0,0,0.04)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '28px', padding: '0 8px' }}>
           <div style={{ width: '36px', height: '36px', background: renk.primary, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>📚</div>
           <div>
@@ -38,25 +42,33 @@ export default function Dashboard({ session }) {
           { key: 'students', label: 'Öğrenciler', icon: '👥' },
           { key: 'exams', label: 'Deneme Gir', icon: '📝' },
         ].map(m => (
-          <button key={m.key} onClick={() => setPage(m.key)} style={{
+          <button key={m.key} onClick={() => { setPage(m.key); setSelectedStudentId(null) }} style={{
             display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: 'none', borderRadius: '10px', cursor: 'pointer',
-            background: page === m.key ? renk.primaryLight : 'transparent',
-            color: page === m.key ? renk.primaryDark : renk.gray600,
-            fontWeight: page === m.key ? '600' : '400',
-            fontSize: font.size.md, textAlign: 'left',
+            background: page === m.key && !selectedStudentId ? renk.primaryLight : 'transparent',
+            color: page === m.key && !selectedStudentId ? renk.primaryDark : renk.gray600,
+            fontWeight: page === m.key && !selectedStudentId ? '600' : '400',
+            fontSize: font.size.md, textAlign: 'left', fontFamily: font.family,
           }}>
             <span>{m.icon}</span> {m.label}
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: renk.redLight, border: 'none', borderRadius: '10px', cursor: 'pointer', color: renk.red, fontSize: font.size.md }}>
+        <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: renk.redLight, border: 'none', borderRadius: '10px', cursor: 'pointer', color: renk.red, fontSize: font.size.md, fontFamily: font.family }}>
           🚪 Çıkış Yap
         </button>
       </div>
+
+      {/* Sağ içerik */}
       <div style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
-        {page === 'dashboard' && <DashboardHome />}
-        {page === 'students' && <Students />}
-        {page === 'exams' && <ExamEntry />}
+        {selectedStudentId ? (
+          <StudentDetail studentId={selectedStudentId} onBack={() => setSelectedStudentId(null)} />
+        ) : (
+          <>
+            {page === 'dashboard' && <DashboardHome onStudentClick={setSelectedStudentId} />}
+            {page === 'students' && <Students onStudentClick={setSelectedStudentId} />}
+            {page === 'exams' && <ExamEntry />}
+          </>
+        )}
       </div>
     </div>
   )
@@ -64,11 +76,7 @@ export default function Dashboard({ session }) {
 
 function StatCard({ icon, baslik, children, accentBg }) {
   return (
-    <div style={{
-      background: renk.white, borderRadius: '20px', border: `1px solid ${renk.gray200}`,
-      padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-    }}>
+    <div style={{ background: renk.white, borderRadius: '20px', border: `1px solid ${renk.gray200}`, padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: accentBg || renk.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
           {icon}
@@ -80,7 +88,46 @@ function StatCard({ icon, baslik, children, accentBg }) {
   )
 }
 
-function DashboardHome() {
+function DunGirmeyenlerKart({ dunGirmeyenler, onStudentClick }) {
+  const [acik, setAcik] = useState(false)
+  const goster = acik ? dunGirmeyenler : dunGirmeyenler.slice(0, 4)
+  const dun = new Date(); dun.setDate(dun.getDate() - 1)
+  const dunLabel = `${dun.getDate()}/${dun.getMonth() + 1}`
+
+  return (
+    <StatCard icon="🔔" baslik={`Dün (${dunLabel}) Giriş Yapmayanlar`} accentBg="#fff7ed">
+      {dunGirmeyenler.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: renk.greenLight, borderRadius: '10px', padding: '12px 14px' }}>
+          <span style={{ fontSize: '20px' }}>✅</span>
+          <span style={{ fontSize: '14px', fontWeight: '700', color: renk.green }}>Herkes giriş yaptı!</span>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {goster.map((s) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', background: renk.gray50, borderRadius: '9px' }}>
+                <span style={{ fontSize: '13px', marginRight: '6px' }}>😴</span>
+                <span onClick={() => onStudentClick(s.id)} style={{ fontSize: '13px', fontWeight: '500', color: renk.primary, cursor: 'pointer', textDecoration: 'underline' }}>
+                  {s.full_name}
+                </span>
+              </div>
+            ))}
+          </div>
+          {dunGirmeyenler.length > 4 && (
+            <button onClick={() => setAcik(p => !p)} style={{ background: 'none', border: `1px solid ${renk.gray200}`, borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', color: renk.gray600, fontFamily: font.family, marginTop: '4px' }}>
+              {acik ? '▲ Daha az göster' : `▼ +${dunGirmeyenler.length - 4} kişi daha`}
+            </button>
+          )}
+          <div style={{ fontSize: '12px', color: renk.gray400, marginTop: '4px' }}>
+            {dunGirmeyenler.length} öğrenci dün sisteme giriş yapmadı
+          </div>
+        </>
+      )}
+    </StatCard>
+  )
+}
+
+function DashboardHome({ onStudentClick }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dusurenAcik, setDusurenAcik] = useState(false)
@@ -90,7 +137,22 @@ function DashboardHome() {
 
   async function fetchStats() {
     const { data: exams } = await supabase.from('exams').select('*').eq('type', 'common').order('date', { ascending: true })
-    if (!exams || exams.length === 0) { setLoading(false); return }
+    const { data: students } = await supabase.from('students').select('id, full_name').eq('role', 'student')
+    const studentMap = {}
+    students?.forEach(s => { studentMap[s.id] = { isim: s.full_name, id: s.id } })
+
+    const dun = new Date()
+    dun.setDate(dun.getDate() - 1)
+    const dunStr = dun.toISOString().split('T')[0]
+    const { data: dunKayitlar } = await supabase.from('daily_study').select('student_id').eq('date', dunStr)
+    const dunGirenler = new Set((dunKayitlar || []).map(k => k.student_id))
+    const dunGirmeyenler = (students || []).filter(s => !dunGirenler.has(s.id))
+
+    if (!exams || exams.length === 0) {
+      setStats({ dunGirmeyenler, sonDeneme: null })
+      setLoading(false)
+      return
+    }
 
     const sonDeneme = exams[exams.length - 1]
     const oncekiDeneme = exams.length > 1 ? exams[exams.length - 2] : null
@@ -102,17 +164,12 @@ function DashboardHome() {
       oncekiResults = data || []
     }
 
-    const { data: students } = await supabase.from('students').select('id, full_name').eq('role', 'student')
-    const studentMap = {}
-    students?.forEach(s => { studentMap[s.id] = s.full_name })
-
     const sonNetler = (sonResults || []).map(r => toplamNet(r))
     const sonOrtalama = sonNetler.length > 0 ? parseFloat((sonNetler.reduce((a, b) => a + b, 0) / sonNetler.length).toFixed(2)) : 0
     const oncekiNetler = oncekiResults.map(r => toplamNet(r))
     const oncekiOrtalama = oncekiNetler.length > 0 ? parseFloat((oncekiNetler.reduce((a, b) => a + b, 0) / oncekiNetler.length).toFixed(2)) : null
     const ortalamaFark = oncekiOrtalama !== null ? parseFloat((sonOrtalama - oncekiOrtalama).toFixed(2)) : null
 
-    // Branş ortalaması — en zayıf dersi maksimum soru sayısına oranla bul
     const bransOrtalama = DERSLER.map(d => {
       const list = (sonResults || []).map(r => net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0))
       const ort = list.length > 0 ? parseFloat((list.reduce((a, b) => a + b, 0) / list.length).toFixed(2)) : 0
@@ -128,7 +185,7 @@ function DashboardHome() {
         const or = oncekiResults.find(r => r.student_id === sr.student_id)
         if (or) {
           const fark = parseFloat((toplamNet(sr) - toplamNet(or)).toFixed(2))
-          const obj = { isim: studentMap[sr.student_id] || '', onceki: parseFloat(toplamNet(or).toFixed(2)), son: parseFloat(toplamNet(sr).toFixed(2)), fark }
+          const obj = { isim: studentMap[sr.student_id]?.isim || '', id: sr.student_id, onceki: parseFloat(toplamNet(or).toFixed(2)), son: parseFloat(toplamNet(sr).toFixed(2)), fark }
           if (fark < 0) dusurenler.push(obj)
           if (fark > 0) son2Yukselenler.push(obj)
         }
@@ -151,7 +208,7 @@ function DashboardHome() {
         const ir = ilkExam.results.find(r => r.student_id === sr.student_id)
         if (ir) {
           const fark = parseFloat((toplamNet(sr) - toplamNet(ir)).toFixed(2))
-          yukselenler.push({ isim: studentMap[sr.student_id] || '', ilk: parseFloat(toplamNet(ir).toFixed(2)), son: parseFloat(toplamNet(sr).toFixed(2)), fark })
+          yukselenler.push({ isim: studentMap[sr.student_id]?.isim || '', id: sr.student_id, ilk: parseFloat(toplamNet(ir).toFixed(2)), son: parseFloat(toplamNet(sr).toFixed(2)), fark })
         }
       })
       yukselenler.sort((a, b) => b.fark - a.fark)
@@ -174,7 +231,7 @@ function DashboardHome() {
     if (oncekiResults.length > 0) {
       sonResults?.forEach(sr => {
         const or = oncekiResults.find(r => r.student_id === sr.student_id)
-        if (or) degisimler.push({ isim: studentMap[sr.student_id] || '', fark: parseFloat((toplamNet(sr) - toplamNet(or)).toFixed(2)) })
+        if (or) degisimler.push({ isim: studentMap[sr.student_id]?.isim || '', fark: parseFloat((toplamNet(sr) - toplamNet(or)).toFixed(2)) })
       })
     }
 
@@ -184,16 +241,24 @@ function DashboardHome() {
       dusurenler, son2Yukselenler,
       yukselenler: yukselenler.slice(0, 5),
       trendData, bransTrend,
-      sonResults: (sonResults || []).map(r => ({ ...r, isim: studentMap[r.student_id] || '' })).filter(r => r.isim),
+      sonResults: (sonResults || []).map(r => ({ ...r, isim: studentMap[r.student_id]?.isim || '', studentId: r.student_id })).filter(r => r.isim),
       degisimler,
+      dunGirmeyenler,
     })
     setLoading(false)
   }
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
-  if (!stats) return <div><h2 style={{ color: renk.gray800 }}>Genel Bakış</h2><p style={{ color: renk.gray400 }}>Henüz ortak deneme eklenmemiş.</p></div>
+  if (!stats) return <div><h2 style={{ color: renk.gray800 }}>Genel Bakış</h2><p style={{ color: renk.gray400 }}>Henüz veri yok.</p></div>
 
-  const { sonDeneme, sonOrtalama, ortalamaFark, enZayifDers, bransOrtalama, dusurenler, son2Yukselenler, yukselenler, trendData, bransTrend, sonResults, degisimler } = stats
+  if (!stats.sonDeneme) return (
+    <div>
+      <h2 style={{ color: renk.gray800, marginBottom: '24px' }}>Genel Bakış</h2>
+      <DunGirmeyenlerKart dunGirmeyenler={stats.dunGirmeyenler} onStudentClick={onStudentClick} />
+    </div>
+  )
+
+  const { sonDeneme, sonOrtalama, ortalamaFark, enZayifDers, bransOrtalama, dusurenler, son2Yukselenler, yukselenler, trendData, bransTrend, sonResults, degisimler, dunGirmeyenler } = stats
 
   const dusurenGoster = dusurenAcik ? dusurenler : dusurenler.slice(0, 4)
   const yukselenGoster = yukselenAcik ? son2Yukselenler : son2Yukselenler.slice(0, 4)
@@ -205,10 +270,8 @@ function DashboardHome() {
         Son deneme: <strong style={{ color: renk.primary }}>{sonDeneme.name}</strong> ({sonDeneme.date})
       </p>
 
-      {/* 4 Kart */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', marginBottom: '32px' }}>
 
-        {/* Kart 1: Net Değişim İndeksi */}
         <StatCard icon="📈" baslik="Net Değişim İndeksi" accentBg={renk.primaryLight}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
             <span style={{ fontSize: '40px', fontWeight: '800', color: renk.gray800, lineHeight: 1 }}>{sonOrtalama}</span>
@@ -218,9 +281,7 @@ function DashboardHome() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: ortalamaFark >= 0 ? renk.greenLight : renk.redLight, borderRadius: '10px', padding: '8px 14px' }}>
               <span style={{ fontSize: '20px', lineHeight: 1 }}>{ortalamaFark >= 0 ? '↑' : '↓'}</span>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: ortalamaFark >= 0 ? renk.green : renk.red }}>
-                  {ortalamaFark >= 0 ? '+' : ''}{ortalamaFark} net
-                </div>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: ortalamaFark >= 0 ? renk.green : renk.red }}>{ortalamaFark >= 0 ? '+' : ''}{ortalamaFark} net</div>
                 <div style={{ fontSize: '11px', color: ortalamaFark >= 0 ? renk.green : renk.red, opacity: 0.8 }}>önceki denemeden</div>
               </div>
             </div>
@@ -229,7 +290,6 @@ function DashboardHome() {
           )}
         </StatCard>
 
-        {/* Kart 2: En Zayıf Halka */}
         <StatCard icon="⚠️" baslik="Müdahale Gereken Ders" accentBg={renk.redLight}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
             <span style={{ fontSize: '32px', fontWeight: '800', color: renk.gray800, lineHeight: 1 }}>{enZayifDers.label}</span>
@@ -239,13 +299,10 @@ function DashboardHome() {
               <div style={{ fontSize: '18px', fontWeight: '800', color: renk.red }}>{enZayifDers.ortalama} / {enZayifDers.maxSoru}</div>
               <div style={{ fontSize: '11px', color: renk.red, opacity: 0.8 }}>ort. net / maks. net</div>
             </div>
-            <div style={{ fontSize: '12px', color: renk.gray400, lineHeight: '1.5' }}>
-              %{Math.round(enZayifDers.oran * 100)}<br />doluluk oranı
-            </div>
+            <div style={{ fontSize: '12px', color: renk.gray400, lineHeight: '1.5' }}>%{Math.round(enZayifDers.oran * 100)}<br />doluluk oranı</div>
           </div>
         </StatCard>
 
-        {/* Kart 3: Son 2 Denemede Düşenler */}
         <StatCard icon="📉" baslik="Son 2 Denemede Düşenler" accentBg={renk.redLight}>
           {dusurenler.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: renk.greenLight, borderRadius: '10px', padding: '12px 14px' }}>
@@ -257,12 +314,10 @@ function DashboardHome() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {dusurenGoster.filter(d => d.isim).map((d, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: i === 0 && !dusurenAcik ? renk.redLight : renk.gray50, borderRadius: '9px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: i === 0 ? '700' : '500', color: renk.gray800 }}>
+                    <span onClick={() => onStudentClick(d.id)} style={{ fontSize: '13px', fontWeight: i === 0 ? '700' : '500', color: renk.primary, cursor: 'pointer', textDecoration: 'underline' }}>
                       {i === 0 && !dusurenAcik ? '🔴 ' : ''}{d.isim}
                     </span>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: renk.red, whiteSpace: 'nowrap', marginLeft: '8px' }}>
-                      {d.onceki} → {d.son} <span style={{ opacity: 0.8 }}>({d.fark})</span>
-                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: renk.red, whiteSpace: 'nowrap', marginLeft: '8px' }}>{d.onceki} → {d.son} <span style={{ opacity: 0.8 }}>({d.fark})</span></span>
                   </div>
                 ))}
               </div>
@@ -275,7 +330,6 @@ function DashboardHome() {
           )}
         </StatCard>
 
-        {/* Kart 4: Son 2 Denemede Artanlar */}
         <StatCard icon="📊" baslik="Son 2 Denemede Artanlar" accentBg={renk.greenLight}>
           {son2Yukselenler.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: renk.redLight, borderRadius: '10px', padding: '12px 14px' }}>
@@ -287,12 +341,10 @@ function DashboardHome() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {yukselenGoster.filter(d => d.isim).map((d, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: i === 0 && !yukselenAcik ? renk.greenLight : renk.gray50, borderRadius: '9px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: i === 0 ? '700' : '500', color: renk.gray800 }}>
+                    <span onClick={() => onStudentClick(d.id)} style={{ fontSize: '13px', fontWeight: i === 0 ? '700' : '500', color: renk.primary, cursor: 'pointer', textDecoration: 'underline' }}>
                       {i === 0 && !yukselenAcik ? '🟢 ' : ''}{d.isim}
                     </span>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: renk.green, whiteSpace: 'nowrap', marginLeft: '8px' }}>
-                      {d.onceki} → {d.son} <span style={{ opacity: 0.8 }}>(+{d.fark})</span>
-                    </span>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: renk.green, whiteSpace: 'nowrap', marginLeft: '8px' }}>{d.onceki} → {d.son} <span style={{ opacity: 0.8 }}>(+{d.fark})</span></span>
                   </div>
                 ))}
               </div>
@@ -305,19 +357,18 @@ function DashboardHome() {
           )}
         </StatCard>
 
+        <DunGirmeyenlerKart dunGirmeyenler={dunGirmeyenler} onStudentClick={onStudentClick} />
+
       </div>
 
-      {/* Top 5 Yükselen */}
       {yukselenler.length > 0 && (
         <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, padding: '24px', marginBottom: '32px' }}>
           <h3 style={{ color: renk.gray800, marginBottom: '16px', marginTop: 0 }}>🚀 Dönemin Top 5 Yükseleni</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {yukselenler.map((y, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: i === 0 ? '#fefce8' : renk.gray50, borderRadius: '10px', border: `1px solid ${i === 0 ? '#fde047' : renk.gray200}` }}>
-                <span style={{ fontSize: '18px', minWidth: '28px' }}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
-                </span>
-                <span style={{ flex: 1, fontWeight: i === 0 ? '700' : '500', color: renk.gray800, fontSize: font.size.md }}>{y.isim}</span>
+                <span style={{ fontSize: '18px', minWidth: '28px' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                <span onClick={() => onStudentClick(y.id)} style={{ flex: 1, fontWeight: i === 0 ? '700' : '500', color: renk.primary, fontSize: font.size.md, cursor: 'pointer', textDecoration: 'underline' }}>{y.isim}</span>
                 <span style={{ fontSize: '13px', color: renk.gray400 }}>{y.ilk} → {y.son}</span>
                 <span style={{ fontSize: '15px', fontWeight: '800', color: renk.green, minWidth: '60px', textAlign: 'right' }}>+{y.fark} ↑</span>
               </div>
@@ -326,7 +377,6 @@ function DashboardHome() {
         </div>
       )}
 
-      {/* Trend */}
       {trendData.length > 1 && (
         <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, padding: '24px', marginBottom: '32px' }}>
           <h3 style={{ color: renk.gray800, marginBottom: '20px', marginTop: 0 }}>Sınıf Ortalaması Trendi</h3>
@@ -342,7 +392,6 @@ function DashboardHome() {
         </div>
       )}
 
-      {/* Branş ortalamaları */}
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, padding: '24px', marginBottom: '32px' }}>
         <h3 style={{ color: renk.gray800, marginBottom: '20px', marginTop: 0 }}>Son Denemede Branş Ortalamaları</h3>
         <ResponsiveContainer width="100%" height={220}>
@@ -356,7 +405,6 @@ function DashboardHome() {
         </ResponsiveContainer>
       </div>
 
-      {/* Branş bazlı trend */}
       {bransTrend[0].data.length > 1 && (
         <>
           <h3 style={{ color: renk.gray800, marginBottom: '20px' }}>Branş Bazlı Gelişim Trendi</h3>
@@ -379,7 +427,6 @@ function DashboardHome() {
         </>
       )}
 
-      {/* Öğrenci sıralaması */}
       <h3 style={{ color: renk.gray800, marginBottom: '16px' }}>Öğrenci Sıralaması</h3>
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '500px', marginBottom: '32px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -396,7 +443,9 @@ function DashboardHome() {
                 <td style={{ padding: '12px 16px', fontWeight: '700', color: i === 0 ? '#f59e0b' : renk.gray600 }}>
                   {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                 </td>
-                <td style={{ padding: '12px 16px', color: renk.gray800 }}>{r.isim}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span onClick={() => onStudentClick(r.studentId)} style={{ color: renk.primary, cursor: 'pointer', textDecoration: 'underline', fontWeight: '500' }}>{r.isim}</span>
+                </td>
                 <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: renk.primary }}>{toplamNet(r).toFixed(2)}</td>
               </tr>
             ))}
@@ -404,7 +453,6 @@ function DashboardHome() {
         </table>
       </div>
 
-      {/* Değişim tablosu */}
       {degisimler.filter(d => d.isim).length > 0 && (
         <>
           <h3 style={{ color: renk.gray800, marginBottom: '16px' }}>Önceki Denemeye Göre Değişim</h3>
