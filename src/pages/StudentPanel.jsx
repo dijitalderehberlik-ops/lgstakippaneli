@@ -313,28 +313,30 @@ function GunlukCalisma({ userId, isMobile }) {
   }
 
   const selectStyle = {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: '10px',
-    border: '1px solid #e2e8f0',
-    fontSize: '14px',
-    fontFamily: font.family,
-    background: '#fff',
-    color: '#1e293b',
-    boxSizing: 'border-box',
+    width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0',
+    fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b', boxSizing: 'border-box',
   }
 
   const inputStyle = {
-    width: '100%',
-    padding: '10px',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    textAlign: 'center',
-    fontSize: '16px',
-    fontFamily: font.family,
-    background: '#fff',
-    boxSizing: 'border-box',
+    width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0',
+    textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff', boxSizing: 'border-box',
   }
+
+  // Mevcut kayıtları derse göre grupla
+  const dersGruplari = GUNLUK_DERSLER_TANIM.map(d => {
+    const kayitlar = mevcutKayitlar.filter(k => k.lesson === d.key)
+    if (kayitlar.length === 0) return null
+    const topD = kayitlar.reduce((a, k) => a + (k.dogru || 0), 0)
+    const topY = kayitlar.reduce((a, k) => a + (k.yanlis || 0), 0)
+    const topB = kayitlar.reduce((a, k) => a + (k.bos || 0), 0)
+    const topSoru = topD + topY + topB
+    return { key: d.key, label: d.label, kayitlar, topD, topY, topB, topSoru }
+  }).filter(Boolean)
+
+  const gunTopD = dersGruplari.reduce((a, d) => a + d.topD, 0)
+  const gunTopY = dersGruplari.reduce((a, d) => a + d.topY, 0)
+  const gunTopB = dersGruplari.reduce((a, d) => a + d.topB, 0)
+  const gunTopSoru = gunTopD + gunTopY + gunTopB
 
   return (
     <div>
@@ -345,26 +347,52 @@ function GunlukCalisma({ userId, isMobile }) {
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...selectStyle, width: 'auto' }} />
       </div>
 
-      {mevcutKayitlar.length > 0 && (
+      {dersGruplari.length > 0 && (
         <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', marginBottom: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', background: '#f0fdfa', borderBottom: '1px solid #e2e8f0', fontWeight: '600', color: '#0f766e', fontSize: '13px' }}>Bu tarihe ait kayıtlar</div>
-          {mevcutKayitlar.map(k => {
-            const dersLabel = GUNLUK_DERSLER_TANIM.find(d => d.key === k.lesson)?.label || k.lesson
-            return (
-              <div key={k.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>{dersLabel}</div>
-                  {k.topic && <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{k.topic}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#10b981' }}>D:{k.dogru}</span>
-                  <span style={{ fontSize: '12px', color: '#ef4444' }}>Y:{k.yanlis}</span>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>B:{k.bos}</span>
-                  <span style={{ fontSize: '14px', fontWeight: '700', color: '#0d9488' }}>{net(k.dogru, k.yanlis)}</span>
+          <div style={{ padding: '12px 16px', background: '#f0fdfa', borderBottom: '1px solid #e2e8f0', fontWeight: '600', color: '#0f766e', fontSize: '13px' }}>
+            Bu tarihe ait kayıtlar
+          </div>
+
+          {dersGruplari.map(d => (
+            <div key={d.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
+              {/* Ders satırı - toplam */}
+              <div style={{ padding: '10px 16px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>{d.label}</span>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>{d.topSoru} soru</span>
+                  <span style={{ fontSize: '12px', color: '#10b981', fontWeight: '600' }}>D:{d.topD}</span>
+                  <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>Y:{d.topY}</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>B:{d.topB}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#0d9488' }}>{net(d.topD, d.topY)}</span>
                 </div>
               </div>
-            )
-          })}
+              {/* Konu detayları */}
+              {(d.kayitlar.length > 1 || d.kayitlar[0]?.topic) && d.kayitlar.map(k => (
+                <div key={k.id} style={{ padding: '8px 16px 8px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>{k.topic || '—'}</span>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{(k.dogru||0)+(k.yanlis||0)+(k.bos||0)} soru</span>
+                    <span style={{ fontSize: '11px', color: '#10b981' }}>D:{k.dogru}</span>
+                    <span style={{ fontSize: '11px', color: '#ef4444' }}>Y:{k.yanlis}</span>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>B:{k.bos}</span>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#0d9488' }}>{net(k.dogru, k.yanlis)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* Günlük toplam */}
+          <div style={{ padding: '12px 16px', background: '#0d9488', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Günlük Toplam</span>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: '#ccfbf1', fontWeight: '600' }}>{gunTopSoru} soru</span>
+              <span style={{ fontSize: '12px', color: '#86efac', fontWeight: '600' }}>D:{gunTopD}</span>
+              <span style={{ fontSize: '12px', color: '#fca5a5', fontWeight: '600' }}>Y:{gunTopY}</span>
+              <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: '600' }}>B:{gunTopB}</span>
+              <span style={{ fontSize: '15px', fontWeight: '800', color: '#fff' }}>{net(gunTopD, gunTopY)}</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -393,8 +421,6 @@ function GunlukCalisma({ userId, isMobile }) {
                       {konular.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                   )}
-
-                  {/* D / Y / B / Net — her zaman 2x2 grid, taşmaz */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {[
                       { key: 'dogru', label: 'Doğru ✅', color: '#10b981' },
@@ -403,12 +429,7 @@ function GunlukCalisma({ userId, isMobile }) {
                     ].map(alan => (
                       <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
-                        <input
-                          type="number" min="0"
-                          value={satir[alan.key]}
-                          onChange={e => handleSatirChange(i, alan.key, e.target.value)}
-                          style={inputStyle}
-                        />
+                        <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)} style={inputStyle} />
                       </div>
                     ))}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -418,7 +439,6 @@ function GunlukCalisma({ userId, isMobile }) {
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
             )
