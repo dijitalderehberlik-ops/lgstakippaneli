@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, input, buton } from '../styles'
 
@@ -9,30 +9,68 @@ function net(d, y) { return (d - y / 3).toFixed(2) }
 
 export default function ExamEntry() {
   const [bolum, setBolum] = useState('ortak')
-
   return (
     <div style={{ fontFamily: font.family }}>
       <h2 style={{ color: renk.gray800, marginBottom: '24px' }}>Deneme Gir</h2>
-
       <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
-        {[
-          { key: 'ortak', label: '👥 Ortak Deneme' },
-          { key: 'bireysel', label: '👤 Bireysel Deneme' },
-        ].map(b => (
+        {[{ key: 'ortak', label: '👥 Ortak Deneme' }, { key: 'bireysel', label: '👤 Bireysel Deneme' }].map(b => (
           <button key={b.key} onClick={() => setBolum(b.key)} style={{
             padding: '10px 24px', border: 'none', borderRadius: '10px', cursor: 'pointer',
             background: bolum === b.key ? renk.primary : renk.gray100,
             color: bolum === b.key ? renk.white : renk.gray600,
             fontWeight: bolum === b.key ? '600' : '400',
             fontSize: font.size.md, fontFamily: font.family
-          }}>
-            {b.label}
-          </button>
+          }}>{b.label}</button>
         ))}
       </div>
-
       {bolum === 'ortak' && <OrtakDeneme />}
       {bolum === 'bireysel' && <BireyselDeneme />}
+    </div>
+  )
+}
+
+function OgrenciArama({ students, value, onChange, onSelect, placeholder }) {
+  const [acik, setAcik] = useState(false)
+  const [aramaMetni, setAramaMetni] = useState(value || '')
+  const ref = useRef()
+
+  useEffect(() => {
+    function disariTikla(e) { if (ref.current && !ref.current.contains(e.target)) setAcik(false) }
+    document.addEventListener('mousedown', disariTikla)
+    return () => document.removeEventListener('mousedown', disariTikla)
+  }, [])
+
+  const filtrelenmis = aramaMetni.length > 0
+    ? students.filter(s => s.full_name.toLowerCase().includes(aramaMetni.toLowerCase()))
+    : []
+
+  function secim(s) {
+    setAramaMetni(s.full_name)
+    setAcik(false)
+    onSelect(s)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        value={aramaMetni}
+        onChange={e => { setAramaMetni(e.target.value); setAcik(true); onChange(e.target.value) }}
+        onFocus={() => aramaMetni.length > 0 && setAcik(true)}
+        placeholder={placeholder || 'Öğrenci ara...'}
+        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: '14px', fontFamily: font.family, boxSizing: 'border-box' }}
+      />
+      {acik && filtrelenmis.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${renk.gray200}`, borderRadius: '8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
+          {filtrelenmis.map(s => (
+            <div key={s.id} onMouseDown={() => secim(s)}
+              style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '14px', color: renk.gray800, borderBottom: `1px solid ${renk.gray100}` }}
+              onMouseEnter={e => e.currentTarget.style.background = renk.primaryLight}
+              onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+              {s.full_name}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -41,6 +79,7 @@ function OrtakDeneme() {
   const [exams, setExams] = useState([])
   const [students, setStudents] = useState([])
   const [selectedExam, setSelectedExam] = useState('')
+  const [satirlar, setSatirlar] = useState([{ student: null, aramaMetni: '' }])
   const [results, setResults] = useState({})
   const [newExamName, setNewExamName] = useState('')
   const [newExamDate, setNewExamDate] = useState('')
@@ -78,7 +117,7 @@ function OrtakDeneme() {
     if (!window.confirm(`"${name}" silinsin mi? Tüm sonuçlar da silinir.`)) return
     await supabase.from('exam_results').delete().eq('exam_id', id)
     await supabase.from('exams').delete().eq('id', id)
-    if (selectedExam === id) { setSelectedExam(''); setResults({}) }
+    if (selectedExam === id) { setSelectedExam(''); setResults({}); setSatirlar([{ student: null, aramaMetni: '' }]) }
     fetchExams()
   }
 
@@ -93,39 +132,63 @@ function OrtakDeneme() {
 
   async function handleExamSelect(examId) {
     setSelectedExam(examId)
+    setResults({})
+    setSatirlar([{ student: null, aramaMetni: '' }])
     if (!examId) return
     const { data } = await supabase.from('exam_results').select('*').eq('exam_id', examId)
-    const existing = {}
-    data?.forEach(r => {
-      existing[r.student_id] = {}
-      DERSLER.forEach(d => {
-        existing[r.student_id][`${d}_d`] = r[`${d}_d`] || 0
-        existing[r.student_id][`${d}_y`] = r[`${d}_y`] || 0
-        existing[r.student_id][`${d}_b`] = r[`${d}_b`] || 0
+    if (data && data.length > 0) {
+      const existing = {}
+      const yeniSatirlar = []
+      data.forEach(r => {
+        existing[r.student_id] = {}
+        DERSLER.forEach(d => {
+          existing[r.student_id][`${d}_d`] = r[`${d}_d`] || 0
+          existing[r.student_id][`${d}_y`] = r[`${d}_y`] || 0
+          existing[r.student_id][`${d}_b`] = r[`${d}_b`] || 0
+        })
+        const s = students.find(st => st.id === r.student_id)
+        if (s) yeniSatirlar.push({ student: s, aramaMetni: s.full_name })
       })
-    })
-    setResults(existing)
+      setResults(existing)
+      if (yeniSatirlar.length > 0) setSatirlar([...yeniSatirlar, { student: null, aramaMetni: '' }])
+    }
   }
 
   function handleChange(studentId, ders, alan, value) {
     setResults(prev => ({ ...prev, [studentId]: { ...prev[studentId], [`${ders}_${alan}`]: parseInt(value) || 0 } }))
   }
 
+  function handleOgrenciSec(i, s) {
+    setSatirlar(prev => {
+      const yeni = [...prev]
+      yeni[i] = { student: s, aramaMetni: s.full_name }
+      if (i === prev.length - 1) yeni.push({ student: null, aramaMetni: '' })
+      return yeni
+    })
+    setResults(prev => ({ ...prev, [s.id]: prev[s.id] || {} }))
+  }
+
+  function handleSatirSil(i) {
+    setSatirlar(prev => prev.filter((_, idx) => idx !== i))
+  }
+
   async function handleSave() {
     setError(''); setSuccess('')
     if (!selectedExam) { setError('Önce bir deneme seçin'); return }
-    const rows = students.map(s => ({
-      student_id: s.id, exam_id: selectedExam,
+    const gecerliSatirlar = satirlar.filter(s => s.student)
+    if (gecerliSatirlar.length === 0) { setError('En az bir öğrenci ekleyin'); return }
+    const rows = gecerliSatirlar.map(s => ({
+      student_id: s.student.id, exam_id: selectedExam,
       ...DERSLER.reduce((acc, d) => ({
         ...acc,
-        [`${d}_d`]: results[s.id]?.[`${d}_d`] || 0,
-        [`${d}_y`]: results[s.id]?.[`${d}_y`] || 0,
-        [`${d}_b`]: results[s.id]?.[`${d}_b`] || 0,
+        [`${d}_d`]: results[s.student.id]?.[`${d}_d`] || 0,
+        [`${d}_y`]: results[s.student.id]?.[`${d}_y`] || 0,
+        [`${d}_b`]: results[s.student.id]?.[`${d}_b`] || 0,
       }), {})
     }))
     const { error } = await supabase.from('exam_results').upsert(rows, { onConflict: 'student_id,exam_id' })
     if (error) { setError('Kaydedilemedi: ' + error.message); return }
-    setSuccess('Sonuçlar kaydedildi ✓')
+    setSuccess(`${rows.length} öğrenci kaydedildi ✓`)
   }
 
   const selectStyle = { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: font.size.md, fontFamily: font.family, background: renk.white, color: renk.gray800 }
@@ -152,7 +215,7 @@ function OrtakDeneme() {
         <h3 style={{ marginBottom: '20px', color: renk.gray800 }}>Yeni Ortak Deneme Oluştur</h3>
         <input placeholder="Deneme adı" value={newExamName} onChange={e => setNewExamName(e.target.value)} style={input} />
         <input type="date" value={newExamDate} onChange={e => setNewExamDate(e.target.value)} style={input} />
-        {error && <div style={{ background: renk.redLight, color: renk.red, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{error}</div>}
+        {error && !selectedExam && <div style={{ background: renk.redLight, color: renk.red, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{error}</div>}
         {success && !selectedExam && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{success}</div>}
         <button onClick={handleAddExam} style={buton.primary}>Oluştur</button>
       </div>
@@ -198,12 +261,13 @@ function OrtakDeneme() {
             <table style={{ borderCollapse: 'collapse', fontSize: font.size.md, width: '100%' }}>
               <thead>
                 <tr style={{ background: renk.gray50 }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '150px', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Öğrenci</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '200px', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Öğrenci</th>
                   {DERSLER.map(d => (
                     <th key={d} colSpan={3} style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>
                       {DERS_LABEL[d]}
                     </th>
                   ))}
+                  <th style={{ padding: '12px 8px' }}></th>
                 </tr>
                 <tr style={{ background: renk.gray50, borderTop: `1px solid ${renk.gray100}` }}>
                   <th></th>
@@ -214,25 +278,41 @@ function OrtakDeneme() {
                       <th key={d+'b'} style={{ padding: '6px 8px', color: renk.gray400, fontSize: font.size.sm, fontWeight: '600' }}>B</th>
                     </>
                   ))}
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {students.map(s => (
-                  <tr key={s.id} style={{ borderTop: `1px solid ${renk.gray100}` }}>
-                    <td style={{ padding: '10px 16px', fontWeight: '600', color: renk.gray800 }}>{s.full_name}</td>
+                {satirlar.map((satir, i) => (
+                  <tr key={i} style={{ borderTop: `1px solid ${renk.gray100}`, background: satir.student ? '#fff' : renk.gray50 }}>
+                    <td style={{ padding: '6px 10px', minWidth: '200px' }}>
+                      <OgrenciArama
+                        students={students}
+                        value={satir.aramaMetni}
+                        onChange={metin => setSatirlar(prev => { const y = [...prev]; y[i] = { ...y[i], aramaMetni: metin }; return y })}
+                        onSelect={s => handleOgrenciSec(i, s)}
+                        placeholder={`${i + 1}. öğrenci ara...`}
+                      />
+                    </td>
                     {DERSLER.map(d => (
                       <>
                         {['d', 'y', 'b'].map(alan => (
                           <td key={d+alan} style={{ padding: '6px 4px' }}>
-                            <input type="number" min="0"
-                              value={results[s.id]?.[`${d}_${alan}`] || ''}
-                              onChange={e => handleChange(s.id, d, alan, e.target.value)}
-                              style={{ width: '48px', padding: '6px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family }}
+                            <input
+                              type="number" min="0"
+                              disabled={!satir.student}
+                              value={satir.student ? (results[satir.student.id]?.[`${d}_${alan}`] || '') : ''}
+                              onChange={e => satir.student && handleChange(satir.student.id, d, alan, e.target.value)}
+                              style={{ width: '48px', padding: '6px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family, background: satir.student ? '#fff' : renk.gray100, color: satir.student ? renk.gray800 : renk.gray400 }}
                             />
                           </td>
                         ))}
                       </>
                     ))}
+                    <td style={{ padding: '6px 8px' }}>
+                      {satir.student && (
+                        <button onClick={() => handleSatirSil(i)} style={{ background: renk.redLight, border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: renk.red, fontSize: '12px' }}>✕</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -271,32 +351,16 @@ function BireyselDeneme() {
     setError(''); setSuccess('')
     if (!selectedStudent) { setError('Öğrenci seçin'); return }
     if (!examName) { setError('Deneme adı girin'); return }
-
-    const { data: examData, error: examError } = await supabase
-      .from('exams')
-      .insert({ name: examName, date: examDate, type: 'individual' })
-      .select()
-      .single()
-
+    const { data: examData, error: examError } = await supabase.from('exams').insert({ name: examName, date: examDate, type: 'individual' }).select().single()
     if (examError) { setError('Deneme oluşturulamadı: ' + examError.message); return }
-
     const row = {
-      student_id: selectedStudent,
-      exam_id: examData.id,
-      ...DERSLER.reduce((acc, d) => ({
-        ...acc,
-        [`${d}_d`]: results[`${d}_d`] || 0,
-        [`${d}_y`]: results[`${d}_y`] || 0,
-        [`${d}_b`]: results[`${d}_b`] || 0,
-      }), {})
+      student_id: selectedStudent, exam_id: examData.id,
+      ...DERSLER.reduce((acc, d) => ({ ...acc, [`${d}_d`]: results[`${d}_d`] || 0, [`${d}_y`]: results[`${d}_y`] || 0, [`${d}_b`]: results[`${d}_b`] || 0 }), {})
     }
-
     const { error: resultError } = await supabase.from('exam_results').insert(row)
     if (resultError) { setError('Sonuç kaydedilemedi: ' + resultError.message); return }
-
     setSuccess('Bireysel deneme kaydedildi ✓')
-    setExamName('')
-    setResults({})
+    setExamName(''); setResults({})
   }
 
   const selectStyle = { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: font.size.md, fontFamily: font.family, background: renk.white, color: renk.gray800 }
@@ -305,13 +369,11 @@ function BireyselDeneme() {
     <div>
       <div style={{ background: renk.white, padding: '24px', borderRadius: '14px', border: `1px solid ${renk.gray200}`, marginBottom: '24px', maxWidth: '480px' }}>
         <h3 style={{ marginBottom: '20px', color: renk.gray800 }}>Bireysel Deneme Bilgileri</h3>
-
         <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: renk.gray600, fontSize: font.size.md }}>Öğrenci</label>
         <select value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)} style={{ ...selectStyle, width: '100%', marginBottom: '12px' }}>
           <option value="">-- Seçin --</option>
           {students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
         </select>
-
         <input placeholder="Deneme adı (örn: Kaya Kariyer Deneme 3)" value={examName} onChange={e => setExamName(e.target.value)} style={input} />
         <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={input} />
       </div>
@@ -343,9 +405,7 @@ function BireyselDeneme() {
                       />
                     </td>
                   ))}
-                  <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.primary }}>
-                    {net(dogru, yanlis)}
-                  </td>
+                  <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.primary }}>{net(dogru, yanlis)}</td>
                 </tr>
               )
             })}
@@ -355,10 +415,7 @@ function BireyselDeneme() {
 
       {error && <div style={{ background: renk.redLight, color: renk.red, padding: '10px 14px', borderRadius: '8px', marginBottom: '16px' }}>{error}</div>}
       {success && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px 14px', borderRadius: '8px', marginBottom: '16px' }}>{success}</div>}
-
-      <button onClick={handleSave} style={{ ...buton.primary, padding: '12px 32px', fontSize: font.size.lg }}>
-        Kaydet
-      </button>
+      <button onClick={handleSave} style={{ ...buton.primary, padding: '12px 32px', fontSize: font.size.lg }}>Kaydet</button>
     </div>
   )
 }
