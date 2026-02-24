@@ -30,7 +30,6 @@ export default function ExamEntry() {
   )
 }
 
-// Inline autocomplete — Excel tarzı
 function OgrenciArama({ students, value, onSelect, placeholder }) {
   const [metin, setMetin] = useState(value || '')
   const [oneri, setOneri] = useState(null)
@@ -58,18 +57,15 @@ function OgrenciArama({ students, value, onSelect, placeholder }) {
   }
 
   function handleBlur() {
-    // Tam eşleşme varsa seç
     const tam = students.find(s => s.full_name.toLowerCase() === metin.toLowerCase())
     if (tam) { setMetin(tam.full_name); onSelect(tam) }
     setOneri(null)
   }
 
-  // Inline öneri: yazdığın kısım + tamamlama gri
   const tamamlama = oneri ? oneri.full_name.slice(metin.length) : ''
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-      {/* Arka planda gri tamamlama metni */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
         padding: '8px 12px', fontSize: '14px', fontFamily: font.family,
@@ -98,12 +94,179 @@ function OgrenciArama({ students, value, onSelect, placeholder }) {
   )
 }
 
+function SonucModal({ exam, students, onClose }) {
+  const [results, setResults] = useState({})
+  const [satirlar, setSatirlar] = useState([{ student: null, aramaMetni: '' }])
+  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('exam_results').select('*').eq('exam_id', exam.id)
+      if (data && data.length > 0) {
+        const existing = {}
+        const yeniSatirlar = []
+        data.forEach(r => {
+          existing[r.student_id] = {}
+          DERSLER.forEach(d => {
+            existing[r.student_id][`${d}_d`] = r[`${d}_d`] || 0
+            existing[r.student_id][`${d}_y`] = r[`${d}_y`] || 0
+          })
+          const s = students.find(st => st.id === r.student_id)
+          if (s) yeniSatirlar.push({ student: s, aramaMetni: s.full_name })
+        })
+        setResults(existing)
+        if (yeniSatirlar.length > 0) setSatirlar([...yeniSatirlar, { student: null, aramaMetni: '' }])
+      }
+      setLoading(false)
+    }
+    load()
+  }, [exam.id])
+
+  function handleChange(studentId, ders, alan, value) {
+    setResults(prev => ({ ...prev, [studentId]: { ...prev[studentId], [`${ders}_${alan}`]: parseInt(value) || 0 } }))
+  }
+
+  function handleOgrenciSec(i, s) {
+    setSatirlar(prev => {
+      const yeni = [...prev]
+      yeni[i] = { student: s, aramaMetni: s.full_name }
+      if (i === prev.length - 1) yeni.push({ student: null, aramaMetni: '' })
+      return yeni
+    })
+    setResults(prev => ({ ...prev, [s.id]: prev[s.id] || {} }))
+  }
+
+  function handleSatirSil(i) {
+    setSatirlar(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  async function handleSave() {
+    setError(''); setSuccess('')
+    const gecerliSatirlar = satirlar.filter(s => s.student)
+    if (gecerliSatirlar.length === 0) { setError('En az bir öğrenci ekleyin'); return }
+    const rows = gecerliSatirlar.map(s => ({
+      student_id: s.student.id, exam_id: exam.id,
+      ...DERSLER.reduce((acc, d) => ({
+        ...acc,
+        [`${d}_d`]: results[s.student.id]?.[`${d}_d`] || 0,
+        [`${d}_y`]: results[s.student.id]?.[`${d}_y`] || 0,
+        [`${d}_b`]: 0,
+      }), {})
+    }))
+    const { error } = await supabase.from('exam_results').upsert(rows, { onConflict: 'student_id,exam_id' })
+    if (error) { setError('Kaydedilemedi: ' + error.message); return }
+    setSuccess(`${rows.length} öğrenci kaydedildi ✓`)
+    setTimeout(() => setSuccess(''), 3000)
+  }
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0007', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, overflowY: 'auto', padding: '24px' }}>
+      <div style={{ background: renk.white, borderRadius: '20px', width: '100%', maxWidth: '1100px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', margin: 'auto' }}>
+
+        {/* Başlık */}
+        <div style={{ padding: '20px 28px', borderBottom: `1px solid ${renk.gray200}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: renk.white, borderRadius: '20px 20px 0 0', zIndex: 10 }}>
+          <div>
+            <h3 style={{ margin: 0, color: renk.gray800, fontSize: '18px' }}>📝 Sonuç Girişi</h3>
+            <div style={{ fontSize: '13px', color: renk.gray400, marginTop: '4px' }}>
+              <strong style={{ color: renk.primary }}>{exam.name}</strong> · {exam.date}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: renk.gray100, border: 'none', borderRadius: '10px', padding: '8px 16px', cursor: 'pointer', color: renk.gray600, fontFamily: font.family, fontSize: '14px', fontWeight: '600' }}>✕ Kapat</button>
+        </div>
+
+        {/* Tablo */}
+        <div style={{ padding: '24px 28px' }}>
+          {loading ? <p style={{ color: renk.gray400 }}>Yükleniyor...</p> : (
+            <>
+              <div style={{ overflowX: 'auto', background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}` }}>
+                <table style={{ borderCollapse: 'collapse', fontSize: font.size.md, width: '100%' }}>
+                  <thead>
+                    <tr style={{ background: renk.gray50 }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '200px', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Öğrenci</th>
+                      {DERSLER.map(d => (
+                        <th key={d} colSpan={2} style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>
+                          {DERS_LABEL[d]}
+                        </th>
+                      ))}
+                      <th style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>Net</th>
+                      <th></th>
+                    </tr>
+                    <tr style={{ background: renk.gray50, borderTop: `1px solid ${renk.gray100}` }}>
+                      <th></th>
+                      {DERSLER.map(d => (
+                        <>
+                          <th key={d+'d'} style={{ padding: '6px 8px', color: renk.green, fontSize: font.size.sm, fontWeight: '600', borderLeft: `2px solid ${renk.gray200}` }}>D</th>
+                          <th key={d+'y'} style={{ padding: '6px 8px', color: renk.red, fontSize: font.size.sm, fontWeight: '600' }}>Y</th>
+                        </>
+                      ))}
+                      <th></th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {satirlar.map((satir, i) => {
+                      const sid = satir.student?.id
+                      const topNet = sid ? toplamNet(results[sid] || {}) : '-'
+                      return (
+                        <tr key={i} style={{ borderTop: `1px solid ${renk.gray100}`, background: satir.student ? '#fff' : renk.gray50 }}>
+                          <td style={{ padding: '6px 10px', minWidth: '200px' }}>
+                            <OgrenciArama
+                              students={students}
+                              value={satir.aramaMetni}
+                              onSelect={s => handleOgrenciSec(i, s)}
+                              placeholder={`${i + 1}. öğrenci`}
+                            />
+                          </td>
+                          {DERSLER.map(d => (
+                            <>
+                              {['d', 'y'].map((alan, ai) => (
+                                <td key={d+alan} style={{ padding: '4px 3px', borderLeft: ai === 0 ? `2px solid ${renk.gray200}` : undefined }}>
+                                  <input
+                                    type="number" min="0"
+                                    disabled={!satir.student}
+                                    value={sid ? (results[sid]?.[`${d}_${alan}`] || '') : ''}
+                                    onChange={e => sid && handleChange(sid, d, alan, e.target.value)}
+                                    style={{ width: '52px', padding: '6px 4px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family, background: satir.student ? '#fff' : renk.gray100, color: satir.student ? renk.gray800 : renk.gray400 }}
+                                  />
+                                </td>
+                              ))}
+                            </>
+                          ))}
+                          <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: renk.primary, borderLeft: `2px solid ${renk.gray200}`, minWidth: '52px' }}>
+                            {sid ? topNet : ''}
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            {satir.student && (
+                              <button onClick={() => handleSatirSil(i)} style={{ background: renk.redLight, border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: renk.red, fontSize: '12px' }}>✕</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {error && <div style={{ background: renk.redLight, color: renk.red, padding: '10px 14px', borderRadius: '8px', marginTop: '16px' }}>{error}</div>}
+              {success && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px 14px', borderRadius: '8px', marginTop: '16px', fontWeight: '600' }}>{success}</div>}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <button onClick={handleSave} style={{ ...buton.primary, padding: '12px 40px', fontSize: font.size.lg, borderRadius: '12px' }}>💾 Kaydet</button>
+                <button onClick={onClose} style={{ ...buton.secondary, padding: '12px 24px', fontSize: font.size.lg, borderRadius: '12px' }}>Kapat</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OrtakDeneme() {
   const [exams, setExams] = useState([])
   const [students, setStudents] = useState([])
-  const [selectedExam, setSelectedExam] = useState('')
-  const [satirlar, setSatirlar] = useState([{ student: null, aramaMetni: '' }])
-  const [results, setResults] = useState({})
+  const [sonucModal, setSonucModal] = useState(null)
   const [newExamName, setNewExamName] = useState('')
   const [newExamDate, setNewExamDate] = useState('')
   const [success, setSuccess] = useState('')
@@ -140,7 +303,6 @@ function OrtakDeneme() {
     if (!window.confirm(`"${name}" silinsin mi? Tüm sonuçlar da silinir.`)) return
     await supabase.from('exam_results').delete().eq('exam_id', id)
     await supabase.from('exams').delete().eq('id', id)
-    if (selectedExam === id) { setSelectedExam(''); setResults({}); setSatirlar([{ student: null, aramaMetni: '' }]) }
     fetchExams()
   }
 
@@ -152,68 +314,6 @@ function OrtakDeneme() {
     setEditSuccess('Güncellendi ✓')
     fetchExams()
   }
-
-  async function handleExamSelect(examId) {
-    setSelectedExam(examId)
-    setResults({})
-    setSatirlar([{ student: null, aramaMetni: '' }])
-    if (!examId) return
-    const { data } = await supabase.from('exam_results').select('*').eq('exam_id', examId)
-    if (data && data.length > 0) {
-      const existing = {}
-      const yeniSatirlar = []
-      data.forEach(r => {
-        existing[r.student_id] = {}
-        DERSLER.forEach(d => {
-          existing[r.student_id][`${d}_d`] = r[`${d}_d`] || 0
-          existing[r.student_id][`${d}_y`] = r[`${d}_y`] || 0
-        })
-        const s = students.find(st => st.id === r.student_id)
-        if (s) yeniSatirlar.push({ student: s, aramaMetni: s.full_name })
-      })
-      setResults(existing)
-      if (yeniSatirlar.length > 0) setSatirlar([...yeniSatirlar, { student: null, aramaMetni: '' }])
-    }
-  }
-
-  function handleChange(studentId, ders, alan, value) {
-    setResults(prev => ({ ...prev, [studentId]: { ...prev[studentId], [`${ders}_${alan}`]: parseInt(value) || 0 } }))
-  }
-
-  function handleOgrenciSec(i, s) {
-    setSatirlar(prev => {
-      const yeni = [...prev]
-      yeni[i] = { student: s, aramaMetni: s.full_name }
-      if (i === prev.length - 1) yeni.push({ student: null, aramaMetni: '' })
-      return yeni
-    })
-    setResults(prev => ({ ...prev, [s.id]: prev[s.id] || {} }))
-  }
-
-  function handleSatirSil(i) {
-    setSatirlar(prev => prev.filter((_, idx) => idx !== i))
-  }
-
-  async function handleSave() {
-    setError(''); setSuccess('')
-    if (!selectedExam) { setError('Önce bir deneme seçin'); return }
-    const gecerliSatirlar = satirlar.filter(s => s.student)
-    if (gecerliSatirlar.length === 0) { setError('En az bir öğrenci ekleyin'); return }
-    const rows = gecerliSatirlar.map(s => ({
-      student_id: s.student.id, exam_id: selectedExam,
-      ...DERSLER.reduce((acc, d) => ({
-        ...acc,
-        [`${d}_d`]: results[s.student.id]?.[`${d}_d`] || 0,
-        [`${d}_y`]: results[s.student.id]?.[`${d}_y`] || 0,
-        [`${d}_b`]: 0,
-      }), {})
-    }))
-    const { error } = await supabase.from('exam_results').upsert(rows, { onConflict: 'student_id,exam_id' })
-    if (error) { setError('Kaydedilemedi: ' + error.message); return }
-    setSuccess(`${rows.length} öğrenci kaydedildi ✓`)
-  }
-
-  const selectStyle = { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: font.size.md, fontFamily: font.family, background: renk.white, color: renk.gray800 }
 
   return (
     <div>
@@ -233,16 +333,24 @@ function OrtakDeneme() {
         </div>
       )}
 
+      {sonucModal && (
+        <SonucModal
+          exam={sonucModal}
+          students={students}
+          onClose={() => setSonucModal(null)}
+        />
+      )}
+
       <div style={{ background: renk.white, padding: '24px', borderRadius: '14px', border: `1px solid ${renk.gray200}`, marginBottom: '24px', maxWidth: '480px' }}>
         <h3 style={{ marginBottom: '20px', color: renk.gray800 }}>Yeni Ortak Deneme Oluştur</h3>
         <input placeholder="Deneme adı" value={newExamName} onChange={e => setNewExamName(e.target.value)} style={input} />
         <input type="date" value={newExamDate} onChange={e => setNewExamDate(e.target.value)} style={input} />
-        {error && !selectedExam && <div style={{ background: renk.redLight, color: renk.red, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{error}</div>}
-        {success && !selectedExam && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{success}</div>}
+        {error && <div style={{ background: renk.redLight, color: renk.red, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{error}</div>}
+        {success && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px', borderRadius: '8px', marginBottom: '10px' }}>{success}</div>}
         <button onClick={handleAddExam} style={buton.primary}>Oluştur</button>
       </div>
 
-      <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '600px', marginBottom: '32px' }}>
+      <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '700px', marginBottom: '32px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr style={{ background: renk.gray50 }}>
@@ -258,6 +366,7 @@ function OrtakDeneme() {
                 <td style={{ padding: '12px 16px', color: renk.gray400 }}>{e.date}</td>
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => setSonucModal(e)} style={{ ...buton.primary, padding: '6px 14px', fontSize: '13px' }}>📝 Sonuç Gir</button>
                     <button onClick={() => { setEditExam(e); setEditName(e.name); setEditDate(e.date); setEditSuccess(''); setEditError('') }} style={buton.detail}>Düzenle</button>
                     <button onClick={() => handleDeleteExam(e.id, e.name)} style={buton.danger}>Sil</button>
                   </div>
@@ -268,90 +377,6 @@ function OrtakDeneme() {
           </tbody>
         </table>
       </div>
-
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <label style={{ fontWeight: '600', color: renk.gray600 }}>Sonuç Gir:</label>
-        <select value={selectedExam} onChange={e => handleExamSelect(e.target.value)} style={{ ...selectStyle, minWidth: '280px' }}>
-          <option value="">-- Deneme Seçin --</option>
-          {exams.map(e => <option key={e.id} value={e.id}>{e.name} ({e.date})</option>)}
-        </select>
-      </div>
-
-      {selectedExam && (
-        <div>
-          <div style={{ overflowX: 'auto', background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}` }}>
-            <table style={{ borderCollapse: 'collapse', fontSize: font.size.md, width: '100%' }}>
-              <thead>
-                <tr style={{ background: renk.gray50 }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '200px', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Öğrenci</th>
-                  {DERSLER.map(d => (
-                    <th key={d} colSpan={2} style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>
-                      {DERS_LABEL[d]}
-                    </th>
-                  ))}
-                  <th style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>Net</th>
-                  <th></th>
-                </tr>
-                <tr style={{ background: renk.gray50, borderTop: `1px solid ${renk.gray100}` }}>
-                  <th></th>
-                  {DERSLER.map(d => (
-                    <>
-                      <th key={d+'d'} style={{ padding: '6px 8px', color: renk.green, fontSize: font.size.sm, fontWeight: '600', borderLeft: `2px solid ${renk.gray200}` }}>D</th>
-                      <th key={d+'y'} style={{ padding: '6px 8px', color: renk.red, fontSize: font.size.sm, fontWeight: '600' }}>Y</th>
-                    </>
-                  ))}
-                  <th></th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {satirlar.map((satir, i) => {
-                  const sid = satir.student?.id
-                  const topNet = sid ? toplamNet(results[sid] || {}) : '-'
-                  return (
-                    <tr key={i} style={{ borderTop: `1px solid ${renk.gray100}`, background: satir.student ? '#fff' : renk.gray50 }}>
-                      <td style={{ padding: '6px 10px', minWidth: '200px' }}>
-                        <OgrenciArama
-                          students={students}
-                          value={satir.aramaMetni}
-                          onSelect={s => handleOgrenciSec(i, s)}
-                          placeholder={`${i + 1}. öğrenci`}
-                        />
-                      </td>
-                      {DERSLER.map(d => (
-                        <>
-                          {['d', 'y'].map((alan, ai) => (
-                            <td key={d+alan} style={{ padding: '4px 3px', borderLeft: ai === 0 ? `2px solid ${renk.gray200}` : undefined }}>
-                              <input
-                                type="number" min="0"
-                                disabled={!satir.student}
-                                value={sid ? (results[sid]?.[`${d}_${alan}`] || '') : ''}
-                                onChange={e => sid && handleChange(sid, d, alan, e.target.value)}
-                                style={{ width: '46px', padding: '6px 4px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family, background: satir.student ? '#fff' : renk.gray100, color: satir.student ? renk.gray800 : renk.gray400 }}
-                              />
-                            </td>
-                          ))}
-                        </>
-                      ))}
-                      <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: renk.primary, borderLeft: `2px solid ${renk.gray200}`, minWidth: '52px' }}>
-                        {sid ? topNet : ''}
-                      </td>
-                      <td style={{ padding: '6px 8px' }}>
-                        {satir.student && (
-                          <button onClick={() => handleSatirSil(i)} style={{ background: renk.redLight, border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: renk.red, fontSize: '12px' }}>✕</button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          {error && <div style={{ background: renk.redLight, color: renk.red, padding: '10px 14px', borderRadius: '8px', marginTop: '16px' }}>{error}</div>}
-          {success && <div style={{ background: renk.greenLight, color: renk.green, padding: '10px 14px', borderRadius: '8px', marginTop: '16px' }}>{success}</div>}
-          <button onClick={handleSave} style={{ ...buton.primary, marginTop: '20px', padding: '12px 32px', fontSize: font.size.lg }}>Kaydet</button>
-        </div>
-      )}
     </div>
   )
 }
