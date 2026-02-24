@@ -5,7 +5,8 @@ import { renk, font, input, buton } from '../styles'
 const DERSLER = ['turkce', 'inkılap', 'din', 'ingilizce', 'matematik', 'fen']
 const DERS_LABEL = { turkce: 'Türkçe', inkılap: 'İnkılap', din: 'Din', ingilizce: 'İngilizce', matematik: 'Matematik', fen: 'Fen' }
 
-function net(d, y) { return (d - y / 3).toFixed(2) }
+function net(d, y) { return parseFloat((d - y / 3).toFixed(2)) }
+function toplamNet(res) { return DERSLER.reduce((acc, d) => acc + net(res[`${d}_d`] || 0, res[`${d}_y`] || 0), 0).toFixed(2) }
 
 export default function ExamEntry() {
   const [bolum, setBolum] = useState('ortak')
@@ -29,48 +30,70 @@ export default function ExamEntry() {
   )
 }
 
-function OgrenciArama({ students, value, onChange, onSelect, placeholder }) {
-  const [acik, setAcik] = useState(false)
-  const [aramaMetni, setAramaMetni] = useState(value || '')
-  const ref = useRef()
+// Inline autocomplete — Excel tarzı
+function OgrenciArama({ students, value, onSelect, placeholder }) {
+  const [metin, setMetin] = useState(value || '')
+  const [oneri, setOneri] = useState(null)
+  const inputRef = useRef()
 
-  useEffect(() => {
-    function disariTikla(e) { if (ref.current && !ref.current.contains(e.target)) setAcik(false) }
-    document.addEventListener('mousedown', disariTikla)
-    return () => document.removeEventListener('mousedown', disariTikla)
-  }, [])
+  useEffect(() => { setMetin(value || '') }, [value])
 
-  const filtrelenmis = aramaMetni.length > 0
-    ? students.filter(s => s.full_name.toLowerCase().includes(aramaMetni.toLowerCase()))
-    : []
-
-  function secim(s) {
-    setAramaMetni(s.full_name)
-    setAcik(false)
-    onSelect(s)
+  function handleChange(e) {
+    const val = e.target.value
+    setMetin(val)
+    if (val.length === 0) { setOneri(null); return }
+    const eslesen = students.find(s => s.full_name.toLowerCase().startsWith(val.toLowerCase()))
+    setOneri(eslesen || null)
   }
 
+  function handleKeyDown(e) {
+    if ((e.key === 'Enter' || e.key === 'Tab') && oneri) {
+      e.preventDefault()
+      setMetin(oneri.full_name)
+      setOneri(null)
+      onSelect(oneri)
+    } else if (e.key === 'Escape') {
+      setOneri(null)
+    }
+  }
+
+  function handleBlur() {
+    // Tam eşleşme varsa seç
+    const tam = students.find(s => s.full_name.toLowerCase() === metin.toLowerCase())
+    if (tam) { setMetin(tam.full_name); onSelect(tam) }
+    setOneri(null)
+  }
+
+  // Inline öneri: yazdığın kısım + tamamlama gri
+  const tamamlama = oneri ? oneri.full_name.slice(metin.length) : ''
+
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+      {/* Arka planda gri tamamlama metni */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        padding: '8px 12px', fontSize: '14px', fontFamily: font.family,
+        pointerEvents: 'none', display: 'flex', alignItems: 'center', overflow: 'hidden',
+        borderRadius: '8px',
+      }}>
+        <span style={{ color: 'transparent' }}>{metin}</span>
+        <span style={{ color: '#94a3b8' }}>{tamamlama}</span>
+      </div>
       <input
-        value={aramaMetni}
-        onChange={e => { setAramaMetni(e.target.value); setAcik(true); onChange(e.target.value) }}
-        onFocus={() => aramaMetni.length > 0 && setAcik(true)}
-        placeholder={placeholder || 'Öğrenci ara...'}
-        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: '14px', fontFamily: font.family, boxSizing: 'border-box' }}
+        ref={inputRef}
+        value={metin}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        style={{
+          width: '100%', padding: '8px 12px', borderRadius: '8px',
+          border: `1px solid ${renk.gray200}`, fontSize: '14px',
+          fontFamily: font.family, boxSizing: 'border-box',
+          background: 'transparent', position: 'relative', zIndex: 1,
+          color: renk.gray800,
+        }}
       />
-      {acik && filtrelenmis.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${renk.gray200}`, borderRadius: '8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
-          {filtrelenmis.map(s => (
-            <div key={s.id} onMouseDown={() => secim(s)}
-              style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '14px', color: renk.gray800, borderBottom: `1px solid ${renk.gray100}` }}
-              onMouseEnter={e => e.currentTarget.style.background = renk.primaryLight}
-              onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-              {s.full_name}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -144,7 +167,6 @@ function OrtakDeneme() {
         DERSLER.forEach(d => {
           existing[r.student_id][`${d}_d`] = r[`${d}_d`] || 0
           existing[r.student_id][`${d}_y`] = r[`${d}_y`] || 0
-          existing[r.student_id][`${d}_b`] = r[`${d}_b`] || 0
         })
         const s = students.find(st => st.id === r.student_id)
         if (s) yeniSatirlar.push({ student: s, aramaMetni: s.full_name })
@@ -183,7 +205,7 @@ function OrtakDeneme() {
         ...acc,
         [`${d}_d`]: results[s.student.id]?.[`${d}_d`] || 0,
         [`${d}_y`]: results[s.student.id]?.[`${d}_y`] || 0,
-        [`${d}_b`]: results[s.student.id]?.[`${d}_b`] || 0,
+        [`${d}_b`]: 0,
       }), {})
     }))
     const { error } = await supabase.from('exam_results').upsert(rows, { onConflict: 'student_id,exam_id' })
@@ -263,58 +285,65 @@ function OrtakDeneme() {
                 <tr style={{ background: renk.gray50 }}>
                   <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '200px', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Öğrenci</th>
                   {DERSLER.map(d => (
-                    <th key={d} colSpan={3} style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>
+                    <th key={d} colSpan={2} style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>
                       {DERS_LABEL[d]}
                     </th>
                   ))}
-                  <th style={{ padding: '12px 8px' }}></th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', borderLeft: `2px solid ${renk.gray200}`, color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>Net</th>
+                  <th></th>
                 </tr>
                 <tr style={{ background: renk.gray50, borderTop: `1px solid ${renk.gray100}` }}>
                   <th></th>
                   {DERSLER.map(d => (
                     <>
-                      <th key={d+'d'} style={{ padding: '6px 8px', color: renk.green, fontSize: font.size.sm, fontWeight: '600' }}>D</th>
+                      <th key={d+'d'} style={{ padding: '6px 8px', color: renk.green, fontSize: font.size.sm, fontWeight: '600', borderLeft: `2px solid ${renk.gray200}` }}>D</th>
                       <th key={d+'y'} style={{ padding: '6px 8px', color: renk.red, fontSize: font.size.sm, fontWeight: '600' }}>Y</th>
-                      <th key={d+'b'} style={{ padding: '6px 8px', color: renk.gray400, fontSize: font.size.sm, fontWeight: '600' }}>B</th>
                     </>
                   ))}
+                  <th></th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {satirlar.map((satir, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${renk.gray100}`, background: satir.student ? '#fff' : renk.gray50 }}>
-                    <td style={{ padding: '6px 10px', minWidth: '200px' }}>
-                      <OgrenciArama
-                        students={students}
-                        value={satir.aramaMetni}
-                        onChange={metin => setSatirlar(prev => { const y = [...prev]; y[i] = { ...y[i], aramaMetni: metin }; return y })}
-                        onSelect={s => handleOgrenciSec(i, s)}
-                        placeholder={`${i + 1}. öğrenci ara...`}
-                      />
-                    </td>
-                    {DERSLER.map(d => (
-                      <>
-                        {['d', 'y', 'b'].map(alan => (
-                          <td key={d+alan} style={{ padding: '6px 4px' }}>
-                            <input
-                              type="number" min="0"
-                              disabled={!satir.student}
-                              value={satir.student ? (results[satir.student.id]?.[`${d}_${alan}`] || '') : ''}
-                              onChange={e => satir.student && handleChange(satir.student.id, d, alan, e.target.value)}
-                              style={{ width: '48px', padding: '6px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family, background: satir.student ? '#fff' : renk.gray100, color: satir.student ? renk.gray800 : renk.gray400 }}
-                            />
-                          </td>
-                        ))}
-                      </>
-                    ))}
-                    <td style={{ padding: '6px 8px' }}>
-                      {satir.student && (
-                        <button onClick={() => handleSatirSil(i)} style={{ background: renk.redLight, border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: renk.red, fontSize: '12px' }}>✕</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {satirlar.map((satir, i) => {
+                  const sid = satir.student?.id
+                  const topNet = sid ? toplamNet(results[sid] || {}) : '-'
+                  return (
+                    <tr key={i} style={{ borderTop: `1px solid ${renk.gray100}`, background: satir.student ? '#fff' : renk.gray50 }}>
+                      <td style={{ padding: '6px 10px', minWidth: '200px' }}>
+                        <OgrenciArama
+                          students={students}
+                          value={satir.aramaMetni}
+                          onSelect={s => handleOgrenciSec(i, s)}
+                          placeholder={`${i + 1}. öğrenci`}
+                        />
+                      </td>
+                      {DERSLER.map(d => (
+                        <>
+                          {['d', 'y'].map((alan, ai) => (
+                            <td key={d+alan} style={{ padding: '4px 3px', borderLeft: ai === 0 ? `2px solid ${renk.gray200}` : undefined }}>
+                              <input
+                                type="number" min="0"
+                                disabled={!satir.student}
+                                value={sid ? (results[sid]?.[`${d}_${alan}`] || '') : ''}
+                                onChange={e => sid && handleChange(sid, d, alan, e.target.value)}
+                                style={{ width: '46px', padding: '6px 4px', borderRadius: '6px', border: `1px solid ${renk.gray200}`, textAlign: 'center', fontSize: font.size.md, fontFamily: font.family, background: satir.student ? '#fff' : renk.gray100, color: satir.student ? renk.gray800 : renk.gray400 }}
+                              />
+                            </td>
+                          ))}
+                        </>
+                      ))}
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: renk.primary, borderLeft: `2px solid ${renk.gray200}`, minWidth: '52px' }}>
+                        {sid ? topNet : ''}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {satir.student && (
+                          <button onClick={() => handleSatirSil(i)} style={{ background: renk.redLight, border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: renk.red, fontSize: '12px' }}>✕</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -355,7 +384,7 @@ function BireyselDeneme() {
     if (examError) { setError('Deneme oluşturulamadı: ' + examError.message); return }
     const row = {
       student_id: selectedStudent, exam_id: examData.id,
-      ...DERSLER.reduce((acc, d) => ({ ...acc, [`${d}_d`]: results[`${d}_d`] || 0, [`${d}_y`]: results[`${d}_y`] || 0, [`${d}_b`]: results[`${d}_b`] || 0 }), {})
+      ...DERSLER.reduce((acc, d) => ({ ...acc, [`${d}_d`]: results[`${d}_d`] || 0, [`${d}_y`]: results[`${d}_y`] || 0, [`${d}_b`]: 0 }), {})
     }
     const { error: resultError } = await supabase.from('exam_results').insert(row)
     if (resultError) { setError('Sonuç kaydedilemedi: ' + resultError.message); return }
@@ -364,6 +393,8 @@ function BireyselDeneme() {
   }
 
   const selectStyle = { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${renk.gray200}`, fontSize: font.size.md, fontFamily: font.family, background: renk.white, color: renk.gray800 }
+  const dogru = DERSLER.reduce((acc, d) => acc + (results[`${d}_d`] || 0), 0)
+  const yanlis = DERSLER.reduce((acc, d) => acc + (results[`${d}_y`] || 0), 0)
 
   return (
     <div>
@@ -378,25 +409,24 @@ function BireyselDeneme() {
         <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={input} />
       </div>
 
-      <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '620px', marginBottom: '20px' }}>
+      <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '520px', marginBottom: '20px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr style={{ background: renk.gray50 }}>
               <th style={{ padding: '12px 16px', textAlign: 'left', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Ders</th>
               <th style={{ padding: '12px 16px', textAlign: 'center', color: renk.green, fontWeight: '600', fontSize: font.size.sm }}>Doğru</th>
               <th style={{ padding: '12px 16px', textAlign: 'center', color: renk.red, fontWeight: '600', fontSize: font.size.sm }}>Yanlış</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', color: renk.gray400, fontWeight: '600', fontSize: font.size.sm }}>Boş</th>
               <th style={{ padding: '12px 16px', textAlign: 'center', color: renk.primary, fontWeight: '600', fontSize: font.size.sm }}>Net</th>
             </tr>
           </thead>
           <tbody>
             {DERSLER.map(d => {
-              const dogru = results[`${d}_d`] || 0
-              const yanlis = results[`${d}_y`] || 0
+              const d_ = results[`${d}_d`] || 0
+              const y_ = results[`${d}_y`] || 0
               return (
                 <tr key={d} style={{ borderTop: `1px solid ${renk.gray100}` }}>
                   <td style={{ padding: '10px 16px', fontWeight: '600', color: renk.gray800 }}>{DERS_LABEL[d]}</td>
-                  {['d', 'y', 'b'].map(alan => (
+                  {['d', 'y'].map(alan => (
                     <td key={alan} style={{ padding: '8px' }}>
                       <input type="number" min="0"
                         value={results[`${d}_${alan}`] || ''}
@@ -405,10 +435,16 @@ function BireyselDeneme() {
                       />
                     </td>
                   ))}
-                  <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.primary }}>{net(dogru, yanlis)}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.primary }}>{net(d_, y_)}</td>
                 </tr>
               )
             })}
+            <tr style={{ borderTop: `2px solid ${renk.gray200}`, background: renk.gray50 }}>
+              <td style={{ padding: '10px 16px', fontWeight: '700', color: renk.gray800 }}>Toplam</td>
+              <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.green }}>{dogru}</td>
+              <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: renk.red }}>{yanlis}</td>
+              <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '800', color: renk.primary }}>{net(dogru, yanlis)}</td>
+            </tr>
           </tbody>
         </table>
       </div>
