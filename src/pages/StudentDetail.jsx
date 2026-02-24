@@ -76,7 +76,7 @@ function EforEfektiflikMatrisi({ konuListesi }) {
     if (!active || !payload?.length) return null
     const d = payload[0].payload
     return (
-      <div style={{ background: '#fff', border: `1px solid #e2e8f0`, borderRadius: '10px', padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxWidth: '220px' }}>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxWidth: '220px' }}>
         <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '4px' }}>{d.konu}</div>
         <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>{d.ders}</div>
         <div style={{ fontSize: '13px', color: '#64748b' }}>Toplam soru: <strong>{d.x}</strong></div>
@@ -89,8 +89,7 @@ function EforEfektiflikMatrisi({ konuListesi }) {
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px' }}>
       <h3 style={{ color: '#1e293b', marginBottom: '4px', marginTop: 0 }}>🎯 Efor & Efektiflik Matrisi</h3>
-      <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px' }}>Her nokta bir konu. Üzerine gel, detayları gör.</p>
-
+      <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>Her nokta bir konu. Üzerine gel, detayları gör.</p>
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
         {[
           { color: '#ef4444', bg: '#fef2f2', label: 'Acil Müdahale', aciklama: 'Çok soru, düşük başarı' },
@@ -107,7 +106,6 @@ function EforEfektiflikMatrisi({ konuListesi }) {
           </div>
         ))}
       </div>
-
       <ResponsiveContainer width="100%" height={360}>
         <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -133,11 +131,10 @@ function MufredatIlerleme({ dailyStudy }) {
       const topY = kayitlar.reduce((a, k) => a + (k.yanlis || 0), 0)
       const topB = kayitlar.reduce((a, k) => a + (k.bos || 0), 0)
       const skor = konuSkoru(topD, topY, topB)
-      return { konu, skor, toplam: topD + topY + topB, basari: yuzde(topD, topD + topY + topB) }
+      return { konu, skor }
     })
-    const tamamlananKonu = konuSkorlar.filter(k => k.skor === 100).length
-    const agirlikliToplam = konuSkorlar.reduce((a, k) => a + k.skor, 0)
-    const genelYuzde = Math.round(agirlikliToplam / konular.length)
+    const tamamlananKonu = konuSkorlar.filter(k => k.skor >= 80).length
+    const genelYuzde = Math.round(konuSkorlar.reduce((a, k) => a + k.skor, 0) / konular.length)
     return { ...d, konular: konuSkorlar, toplamKonu: konular.length, tamamlananKonu, genelYuzde }
   })
 
@@ -168,24 +165,24 @@ function MufredatIlerleme({ dailyStudy }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontWeight: '600', color: '#1e293b', minWidth: '90px' }}>{d.label}</span>
-                <span style={{ fontSize: '13px', color: '#94a3b8' }}>{d.tamamlananKonu}/{d.toplamKonu} konu tamamlandı</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>{d.tamamlananKonu}/{d.toplamKonu} tamamlandı</span>
               </div>
               <span style={{ fontWeight: '700', color: barRenk(d.genelYuzde) }}>{d.genelYuzde}%</span>
             </div>
-            <div style={{ height: '10px', background: '#f1f5f9', borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
+            <div style={{ height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
               <div style={{ height: '100%', width: `${d.genelYuzde}%`, background: barRenk(d.genelYuzde), borderRadius: '5px', transition: 'width 0.5s ease' }} />
             </div>
             <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
               {d.konular.map(k => (
-                <div key={k.konu} title={`${k.konu}: %${k.skor} (${k.toplam} soru)`}
-                  style={{ flex: 1, minWidth: '20px', height: '6px', borderRadius: '3px', background: k.skor === 0 ? '#f1f5f9' : barRenk(k.skor) }} />
+                <div key={k.konu} title={`${k.konu}: %${k.skor}`}
+                  style={{ flex: 1, minWidth: '20px', height: '6px', borderRadius: '3px', background: k.skor === 0 ? '#e2e8f0' : barRenk(k.skor) }} />
               ))}
             </div>
           </div>
         ))}
       </div>
       <div style={{ display: 'flex', gap: '16px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
-        {[{ c: '#10b981', l: 'Tamamlandı (≥80%)' }, { c: '#f59e0b', l: 'Gelişiyor (50-79%)' }, { c: '#0d9488', l: 'Başlandı (<50%)' }, { c: '#e2e8f0', l: 'Hiç çalışılmadı' }].map(l => (
+        {[{ c: '#10b981', l: 'Tamamlandı (≥80%)' }, { c: '#f59e0b', l: 'Gelişiyor (50-79%)' }, { c: '#0d9488', l: 'Başlandı (<50%)' }, { c: '#e2e8f0', l: 'Çalışılmadı' }].map(l => (
           <div key={l.l} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: l.c }} />
             <span style={{ fontSize: '11px', color: '#64748b' }}>{l.l}</span>
@@ -245,10 +242,10 @@ function KonuAnalizi({ dailyStudy }) {
   const cokCalisAzVeriyor = konuListesi.filter(k => k.toplam >= 80 && k.yuzde < 40)
   const bosOranYuksek = konuListesi.filter(k => k.toplam >= 20 && k.b / k.toplam > 0.4)
 
+  const gercekVeriKonular = new Set(dailyStudy.filter(k => k.topic).map(k => `${k.lesson}__${k.topic}`))
   const tumKonular = []
   DERSLER.forEach(d => { (KONULAR[d.key] || []).forEach(k => tumKonular.push({ ders: d.label, konu: k, dersKey: d.key })) })
-  const calisilmis = new Set(dailyStudy.filter(k => k.topic).map(k => `${k.lesson}__${k.topic}`))
-  const dokunulmamis = tumKonular.filter(k => !calisilmis.has(`${k.dersKey}__${k.konu}`))
+  const dokunulmamis = tumKonular.filter(k => !gercekVeriKonular.has(`${k.dersKey}__${k.konu}`))
 
   const haftaGunleri = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt']
   const takvimHucreler = []
@@ -302,7 +299,7 @@ function KonuAnalizi({ dailyStudy }) {
             <XAxis dataKey="gun" tick={{ fontSize: 12, fill: '#94a3b8' }} />
             <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
             <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} formatter={(v) => [v, 'Soru']} />
-            <Bar dataKey="toplam" radius={[6, 6, 0, 0]} name="Soru Sayısı">
+            <Bar dataKey="toplam" radius={[6, 6, 0, 0]}>
               {son7gun.map((entry, i) => <Cell key={i} fill={entry.toplam === 0 ? '#e2e8f0' : '#0d9488'} />)}
             </Bar>
           </BarChart>
@@ -415,19 +412,17 @@ export default function StudentDetail({ studentId, onBack }) {
   const [editSuccess, setEditSuccess] = useState('')
   const [editError, setEditError] = useState('')
 
-  useEffect(() => { fetchStudent(); fetchResults(); fetchDailyStudy() }, [studentId])
+  useEffect(() => { fetchAll() }, [studentId])
 
-  async function fetchStudent() {
-    const { data } = await supabase.from('students').select('*').eq('id', studentId).single()
-    setStudent(data)
-  }
-  async function fetchResults() {
-    const { data } = await supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', studentId).order('exams(date)', { ascending: true })
-    setResults(data || [])
-  }
-  async function fetchDailyStudy() {
-    const { data } = await supabase.from('daily_study').select('*').eq('student_id', studentId).order('date', { ascending: false })
-    setDailyStudy(data || [])
+  async function fetchAll() {
+    const [s, r, d] = await Promise.all([
+      supabase.from('students').select('*').eq('id', studentId).single(),
+      supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', studentId).order('exams(date)', { ascending: true }),
+      supabase.from('daily_study').select('*').eq('student_id', studentId).order('date', { ascending: false }),
+    ])
+    setStudent(s.data)
+    setResults(r.data || [])
+    setDailyStudy(d.data || [])
   }
 
   function openEdit(r) {
@@ -445,7 +440,7 @@ export default function StudentDetail({ studentId, onBack }) {
     const { error } = await supabase.from('exam_results').update(editData).eq('id', editResult.id)
     if (error) { setEditError('Kaydedilemedi: ' + error.message); return }
     setEditSuccess('Güncellendi ✓')
-    fetchResults()
+    fetchAll()
   }
 
   const tumDenemeler = [...results].sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))
@@ -559,7 +554,6 @@ export default function StudentDetail({ studentId, onBack }) {
             <>
               <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px' }}>
                 <h3 style={{ color: '#1e293b', marginBottom: '4px', marginTop: 0 }}>📈 Toplam Net Gelişimi</h3>
-                <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>Ortak ve bireysel denemeler birlikte</p>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -573,7 +567,6 @@ export default function StudentDetail({ studentId, onBack }) {
               {sonResult && (
                 <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px' }}>
                   <h3 style={{ color: '#1e293b', marginBottom: '4px', marginTop: 0 }}>📊 Son Denemede Branş Netlerim</h3>
-                  <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>{sonResult.exams?.name}</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={bransBarData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />

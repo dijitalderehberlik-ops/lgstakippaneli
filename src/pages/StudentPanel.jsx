@@ -36,13 +36,6 @@ const BRANS_RENKLER = {
   'İnkılap': '#ec4899', 'İngilizce': '#10b981', 'Din': '#8b5cf6',
 }
 
-const BEYAN_SECENEKLER = [
-  { value: 90, label: 'Eksiğim Yok', aciklama: 'Ustalaştım', renk: '#10b981', bg: '#f0fdf4' },
-  { value: 75, label: 'Biliyorum', aciklama: 'Ama soru kaçabiliyor', renk: '#f59e0b', bg: '#fffbeb' },
-  { value: 50, label: 'Hatırlıyorum', aciklama: 'Pratik lazım', renk: '#f97316', bg: '#fff7ed' },
-  { value: 0, label: 'Bilmiyorum', aciklama: 'Baştan başlamalıyım', renk: '#94a3b8', bg: '#f8fafc' },
-]
-
 const MENU = [
   { key: 'gunluk', label: 'Çalışma', icon: '📅' },
   { key: 'denemeler', label: 'Denemeler', icon: '📝' },
@@ -96,7 +89,6 @@ export default function StudentPanel({ session }) {
         </div>
       </div>
 
-      {/* Masaüstü: yan menü + içerik */}
       {!isMobile ? (
         <div style={{ display: 'flex', flex: 1 }}>
           <div style={{ width: '200px', background: '#fff', borderRight: '1px solid #e2e8f0', padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -118,7 +110,6 @@ export default function StudentPanel({ session }) {
           </div>
         </div>
       ) : (
-        /* Mobil: içerik + alta tab bar */
         <>
           <div style={{ flex: 1, padding: '16px', overflowY: 'auto', paddingBottom: '80px' }}>
             <PageContent page={page} userId={userId} studentName={studentName} isMobile={true} />
@@ -327,7 +318,7 @@ function GunlukCalisma({ userId, isMobile }) {
     setMevcutKayitlar(data || [])
   }
 
-  const selectStyle = { width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b', appearance: 'none' }
+  const selectStyle = { width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b' }
 
   return (
     <div>
@@ -423,37 +414,19 @@ function GunlukCalisma({ userId, isMobile }) {
 function Gelisim({ userId, studentName, isMobile }) {
   const [results, setResults] = useState([])
   const [dailyStudy, setDailyStudy] = useState([])
-  const [declarations, setDeclarations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [beyanModal, setBeyanModal] = useState(null)
-  const [beyanSuccess, setBeyanSuccess] = useState('')
 
   useEffect(() => {
     if (!userId) return
     Promise.all([
       supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', userId).order('exams(date)', { ascending: true }),
       supabase.from('daily_study').select('*').eq('student_id', userId),
-      supabase.from('topic_declarations').select('*').eq('student_id', userId),
-    ]).then(([r1, r2, r3]) => {
+    ]).then(([r1, r2]) => {
       setResults(r1.data || [])
       setDailyStudy(r2.data || [])
-      setDeclarations(r3.data || [])
       setLoading(false)
     })
   }, [userId])
-
-  async function handleBeyanSave(confidence) {
-    if (!beyanModal) return
-    const { lesson, konu } = beyanModal
-    await supabase.from('topic_declarations').upsert({
-      student_id: userId, lesson, topic: konu, confidence,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'student_id,lesson,topic' })
-    const { data } = await supabase.from('topic_declarations').select('*').eq('student_id', userId)
-    setDeclarations(data || [])
-    setBeyanSuccess('Kaydedildi ✓')
-    setTimeout(() => { setBeyanModal(null); setBeyanSuccess('') }, 800)
-  }
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
 
@@ -464,33 +437,24 @@ function Gelisim({ userId, studentName, isMobile }) {
   const toplamFark = parseFloat((sonNet - ilkNet).toFixed(2))
   const trendData = tumDenemeler.map(r => ({ name: r.exams?.name, net: parseFloat(toplamNet(r).toFixed(2)) }))
 
-  const gercekVeriKonular = new Set(dailyStudy.filter(k => k.topic).map(k => `${k.lesson}__${k.topic}`))
-  const beyanSet = new Set(declarations.map(d => `${d.lesson}__${d.topic}`))
-  const tumKonular = []
-  DERSLER.forEach(d => { (KONULAR[d.key] || []).forEach(k => tumKonular.push({ ders: d.label, konu: k, dersKey: d.key })) })
-  const dokunulmamis = tumKonular.filter(k => !gercekVeriKonular.has(`${k.dersKey}__${k.konu}`) && !beyanSet.has(`${k.dersKey}__${k.konu}`))
-  const sadeceBeyanlı = declarations.filter(d => !gercekVeriKonular.has(`${d.lesson}__${d.topic}`))
-
-  function konuSkorHesapla(dersKey, konu) {
-    const gercekKayitlar = dailyStudy.filter(k => k.lesson === dersKey && k.topic === konu)
-    if (gercekKayitlar.length > 0) {
-      const topD = gercekKayitlar.reduce((a, k) => a + (k.dogru || 0), 0)
-      const topY = gercekKayitlar.reduce((a, k) => a + (k.yanlis || 0), 0)
-      const topB = gercekKayitlar.reduce((a, k) => a + (k.bos || 0), 0)
-      const toplam = topD + topY + topB
-      if (toplam === 0) return 0
-      const basari = Math.round((topD / toplam) * 100)
-      return Math.round(Math.min(toplam / 200, 1) * Math.min(basari / 80, 1) * 100)
-    }
-    const beyan = declarations.find(d => d.lesson === dersKey && d.topic === konu)
-    return beyan ? beyan.confidence : 0
+  function konuSkoru(dogru, yanlis, bos) {
+    const toplam = dogru + yanlis + bos
+    if (toplam === 0) return 0
+    const basari = Math.round((dogru / toplam) * 100)
+    return Math.round(Math.min(toplam / 200, 1) * Math.min(basari / 80, 1) * 100)
   }
 
   const dersIlerleme = DERSLER.map(d => {
-    const konular = KONULAR[d.key] || []
-    const konuSkorlar = konular.map(konu => ({ konu, skor: konuSkorHesapla(d.key, konu) }))
-    const genelYuzde = Math.round(konuSkorlar.reduce((a, k) => a + k.skor, 0) / konular.length)
-    return { ...d, konular: konuSkorlar, toplamKonu: konular.length, genelYuzde }
+    const konular = Object.keys(KONULAR).includes(d.key) ? KONULAR[d.key] : []
+    const konuSkorlar = konular.map(konu => {
+      const kayitlar = dailyStudy.filter(k => k.lesson === d.key && k.topic === konu)
+      const topD = kayitlar.reduce((a, k) => a + (k.dogru || 0), 0)
+      const topY = kayitlar.reduce((a, k) => a + (k.yanlis || 0), 0)
+      const topB = kayitlar.reduce((a, k) => a + (k.bos || 0), 0)
+      return konuSkoru(topD, topY, topB)
+    })
+    const genelYuzde = konular.length > 0 ? Math.round(konuSkorlar.reduce((a, k) => a + k, 0) / konular.length) : 0
+    return { ...d, genelYuzde }
   })
   const genelToplam = Math.round(dersIlerleme.reduce((a, d) => a + d.genelYuzde, 0) / DERSLER.length)
 
@@ -503,35 +467,6 @@ function Gelisim({ userId, studentName, isMobile }) {
 
   return (
     <div>
-      {beyanModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0008', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', zIndex: 200 }}>
-          <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', padding: '24px', width: '100%', maxWidth: '480px', margin: '0 auto' }}>
-            <div style={{ width: '40px', height: '4px', background: '#e2e8f0', borderRadius: '2px', margin: '0 auto 20px' }} />
-            <h3 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: '16px' }}>Konu Hakimiyet Beyanı</h3>
-            <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>
-              <strong style={{ color: '#0d9488' }}>{beyanModal.konu}</strong> konusunda kendinizi nasıl değerlendiriyorsunuz?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {BEYAN_SECENEKLER.map(s => (
-                <button key={s.value} onClick={() => handleBeyanSave(s.value)} style={{
-                  display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px',
-                  border: `2px solid ${s.renk}33`, borderRadius: '12px', background: s.bg,
-                  cursor: 'pointer', textAlign: 'left', fontFamily: font.family
-                }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: s.renk, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontWeight: '700', color: s.renk, fontSize: '14px' }}>{s.label}</div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>{s.aciklama}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {beyanSuccess && <div style={{ marginTop: '16px', background: '#f0fdf4', color: '#10b981', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>{beyanSuccess}</div>}
-            <button onClick={() => setBeyanModal(null)} style={{ marginTop: '16px', width: '100%', padding: '12px', background: '#f8fafc', border: 'none', borderRadius: '10px', cursor: 'pointer', color: '#64748b', fontFamily: font.family, fontSize: '14px' }}>İptal</button>
-          </div>
-        </div>
-      )}
-
       <h2 style={{ color: '#1e293b', marginBottom: '16px', fontSize: isMobile ? '18px' : '22px' }}>📈 Gelişimim</h2>
 
       {results.length > 0 && (
@@ -551,12 +486,11 @@ function Gelisim({ userId, studentName, isMobile }) {
         </div>
       )}
 
-      {/* Müfredat */}
       <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
             <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>📚 Müfredat</div>
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Gerçek veri + beyan dahil</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Sadece gerçek veri</div>
           </div>
           <div style={{ textAlign: 'center', background: '#f0fdfa', borderRadius: '10px', padding: '8px 14px' }}>
             <div style={{ fontSize: '22px', fontWeight: '800', color: '#0d9488' }}>{genelToplam}%</div>
@@ -574,50 +508,6 @@ function Gelisim({ userId, studentName, isMobile }) {
           </div>
         ))}
       </div>
-
-      {/* Henüz beyan edilmemiş konular */}
-      {dokunulmamis.length > 0 && (
-        <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px', marginBottom: '4px' }}>🔲 Değerlendirilmemiş Konular</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '14px' }}>Bu konular için hakimiyet beyanı yapabilirsin.</div>
-          {DERSLER.map(d => {
-            const eksik = dokunulmamis.filter(k => k.dersKey === d.key)
-            if (eksik.length === 0) return null
-            return (
-              <div key={d.key} style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: '#0f766e', marginBottom: '6px' }}>{d.label}</div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {eksik.map(k => (
-                    <button key={k.konu} onClick={() => setBeyanModal({ ders: d.label, lesson: d.key, konu: k.konu })}
-                      style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', color: '#64748b', fontFamily: font.family }}>
-                      {k.konu} <span style={{ color: '#0d9488', fontWeight: '700' }}>+</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Beyan edilen konular */}
-      {sadeceBeyanlı.length > 0 && (
-        <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px', marginBottom: '4px' }}>💬 Beyan Ettiğim Konular</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '14px' }}>Gerçek veri girince beyan otomatik kaldırılır.</div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {sadeceBeyanlı.map(d => {
-              const s = BEYAN_SECENEKLER.find(s => s.value === d.confidence) || BEYAN_SECENEKLER[3]
-              return (
-                <div key={`${d.lesson}__${d.topic}`} onClick={() => setBeyanModal({ ders: d.lesson, lesson: d.lesson, konu: d.topic })}
-                  style={{ padding: '6px 12px', background: s.bg, border: `1px solid ${s.renk}44`, borderRadius: '20px', fontSize: '12px', color: s.renk, fontWeight: '600', cursor: 'pointer' }}>
-                  {d.topic}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {trendData.length >= 2 && (
         <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
