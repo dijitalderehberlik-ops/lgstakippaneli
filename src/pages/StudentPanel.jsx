@@ -377,7 +377,7 @@ function GunlukCalisma({ userId, isMobile }) {
                       {konular.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                   )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: '8px' }}>
                     {[
                       { key: 'dogru', label: 'Doğru', color: '#10b981' },
                       { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
