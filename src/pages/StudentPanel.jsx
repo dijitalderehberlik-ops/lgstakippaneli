@@ -31,11 +31,6 @@ const GUNLUK_DERSLER_TANIM = [
   { key: 'din', label: 'Din', konulu: true },
 ]
 
-const BRANS_RENKLER = {
-  'Türkçe': '#0d9488', 'Matematik': '#6366f1', 'Fen': '#f59e0b',
-  'İnkılap': '#ec4899', 'İngilizce': '#10b981', 'Din': '#8b5cf6',
-}
-
 const MENU = [
   { key: 'gunluk', label: 'Çalışma', icon: '📅' },
   { key: 'denemeler', label: 'Denemeler', icon: '📝' },
@@ -72,7 +67,6 @@ export default function StudentPanel({ session }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f8fafc', fontFamily: font.family }}>
-      {/* Üst başlık */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '12px 16px' : '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '32px', height: '32px', background: '#0d9488', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📚</div>
@@ -377,25 +371,48 @@ function GunlukCalisma({ userId, isMobile }) {
                       {konular.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                   )}
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: '8px' }}>
-                    {[
-                      { key: 'dogru', label: 'Doğru', color: '#10b981' },
-                      { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
-                      { key: 'bos', label: 'Boş', color: '#94a3b8' },
-                    ].map(alan => (
-                      <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
-                        <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)}
-                          style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff' }} />
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: '600', color: '#0d9488', textAlign: 'center' }}>Net</label>
-                      <div style={{ padding: '10px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '16px', fontWeight: '700', color: '#0d9488' }}>
-                        {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
+                  {/* Mobilde D/Y/B dikey, masaüstünde yatay */}
+                  {isMobile ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {[
+                        { key: 'dogru', label: 'Doğru', color: '#10b981' },
+                        { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
+                        { key: 'bos', label: 'Boş', color: '#94a3b8' },
+                      ].map(alan => (
+                        <div key={alan.key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <label style={{ fontSize: '13px', fontWeight: '600', color: alan.color, minWidth: '52px' }}>{alan.label}</label>
+                          <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)}
+                            style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '18px', fontFamily: font.family, background: '#fff' }} />
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#0d9488', minWidth: '52px' }}>Net</label>
+                        <div style={{ flex: 1, padding: '12px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '18px', fontWeight: '700', color: '#0d9488' }}>
+                          {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
+                      {[
+                        { key: 'dogru', label: 'Doğru', color: '#10b981' },
+                        { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
+                        { key: 'bos', label: 'Boş', color: '#94a3b8' },
+                      ].map(alan => (
+                        <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
+                          <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)}
+                            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff' }} />
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: '600', color: '#0d9488', textAlign: 'center' }}>Net</label>
+                        <div style={{ padding: '10px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '16px', fontWeight: '700', color: '#0d9488' }}>
+                          {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -445,7 +462,7 @@ function Gelisim({ userId, studentName, isMobile }) {
   }
 
   const dersIlerleme = DERSLER.map(d => {
-    const konular = Object.keys(KONULAR).includes(d.key) ? KONULAR[d.key] : []
+    const konular = KONULAR[d.key] || []
     const konuSkorlar = konular.map(konu => {
       const kayitlar = dailyStudy.filter(k => k.lesson === d.key && k.topic === konu)
       const topD = kayitlar.reduce((a, k) => a + (k.dogru || 0), 0)
