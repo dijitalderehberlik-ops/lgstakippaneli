@@ -312,7 +312,29 @@ function GunlukCalisma({ userId, isMobile }) {
     setMevcutKayitlar(data || [])
   }
 
-  const selectStyle = { width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b' }
+  const selectStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid #e2e8f0',
+    fontSize: '14px',
+    fontFamily: font.family,
+    background: '#fff',
+    color: '#1e293b',
+    boxSizing: 'border-box',
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '10px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    textAlign: 'center',
+    fontSize: '16px',
+    fontFamily: font.family,
+    background: '#fff',
+    boxSizing: 'border-box',
+  }
 
   return (
     <div>
@@ -329,7 +351,7 @@ function GunlukCalisma({ userId, isMobile }) {
           {mevcutKayitlar.map(k => {
             const dersLabel = GUNLUK_DERSLER_TANIM.find(d => d.key === k.lesson)?.label || k.lesson
             return (
-              <div key={k.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={k.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div>
                   <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '14px' }}>{dersLabel}</div>
                   {k.topic && <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{k.topic}</div>}
@@ -371,48 +393,32 @@ function GunlukCalisma({ userId, isMobile }) {
                       {konular.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
                   )}
-                  {/* Mobilde D/Y/B dikey, masaüstünde yatay */}
-                  {isMobile ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {[
-                        { key: 'dogru', label: 'Doğru', color: '#10b981' },
-                        { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
-                        { key: 'bos', label: 'Boş', color: '#94a3b8' },
-                      ].map(alan => (
-                        <div key={alan.key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <label style={{ fontSize: '13px', fontWeight: '600', color: alan.color, minWidth: '52px' }}>{alan.label}</label>
-                          <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)}
-                            style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '18px', fontFamily: font.family, background: '#fff' }} />
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#0d9488', minWidth: '52px' }}>Net</label>
-                        <div style={{ flex: 1, padding: '12px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '18px', fontWeight: '700', color: '#0d9488' }}>
-                          {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
-                        </div>
+
+                  {/* D / Y / B / Net — her zaman 2x2 grid, taşmaz */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {[
+                      { key: 'dogru', label: 'Doğru ✅', color: '#10b981' },
+                      { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' },
+                      { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' },
+                    ].map(alan => (
+                      <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
+                        <input
+                          type="number" min="0"
+                          value={satir[alan.key]}
+                          onChange={e => handleSatirChange(i, alan.key, e.target.value)}
+                          style={inputStyle}
+                        />
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: '#0d9488', textAlign: 'center' }}>Net 🎯</label>
+                      <div style={{ padding: '10px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '16px', fontWeight: '700', color: '#0d9488' }}>
+                        {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
                       </div>
                     </div>
-                  ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
-                      {[
-                        { key: 'dogru', label: 'Doğru', color: '#10b981' },
-                        { key: 'yanlis', label: 'Yanlış', color: '#ef4444' },
-                        { key: 'bos', label: 'Boş', color: '#94a3b8' },
-                      ].map(alan => (
-                        <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
-                          <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)}
-                            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff' }} />
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '11px', fontWeight: '600', color: '#0d9488', textAlign: 'center' }}>Net</label>
-                        <div style={{ padding: '10px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '16px', fontWeight: '700', color: '#0d9488' }}>
-                          {net(parseInt(satir.dogru) || 0, parseInt(satir.yanlis) || 0)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  </div>
+
                 </div>
               </div>
             )
