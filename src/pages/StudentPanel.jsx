@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, buton } from '../styles'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe' },
@@ -214,7 +214,7 @@ function SinifKarsilastirma({ userId, isMobile }) {
 
   useEffect(() => {
     if (!userId) return
-    async function fetch() {
+    async function fetchData() {
       const { data: exams } = await supabase.from('exams').select('*').eq('type', 'common').order('date', { ascending: false }).limit(1)
       if (!exams || exams.length === 0) { setLoading(false); return }
       const exam = exams[0]
@@ -229,7 +229,7 @@ function SinifKarsilastirma({ userId, isMobile }) {
       setData({ exam, sinifOrtalama, sinifTopOrtalama: tumNetler.length > 0 ? (tumNetler.reduce((a, b) => a + b, 0) / tumNetler.length).toFixed(2) : 0, benimTop: myResult ? toplamNet(myResult).toFixed(2) : '-' })
       setLoading(false)
     }
-    fetch()
+    fetchData()
   }, [userId])
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
@@ -276,12 +276,19 @@ function GunlukCalisma({ userId, isMobile }) {
   const [mevcutKayitlar, setMevcutKayitlar] = useState([])
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [duzenleId, setDuzenleId] = useState(null)
+  const [duzenleData, setDuzenleData] = useState(null)
+  const [silOnay, setSilOnay] = useState(null)
 
   useEffect(() => {
     if (!userId || !date) return
-    supabase.from('daily_study').select('*').eq('student_id', userId).eq('date', date).order('id')
-      .then(({ data }) => setMevcutKayitlar(data || []))
+    kayitlariYukle()
   }, [userId, date])
+
+  async function kayitlariYukle() {
+    const { data } = await supabase.from('daily_study').select('*').eq('student_id', userId).eq('date', date).order('id')
+    setMevcutKayitlar(data || [])
+  }
 
   function handleSatirChange(i, alan, value) {
     setSatirlar(prev => {
@@ -293,7 +300,7 @@ function GunlukCalisma({ userId, isMobile }) {
   }
 
   function handleEkle() { setSatirlar(prev => [...prev, { ders: '', konu: '', dogru: '', yanlis: '', bos: '' }]) }
-  function handleSil(i) { setSatirlar(prev => prev.filter((_, idx) => idx !== i)) }
+  function handleSatirSil(i) { setSatirlar(prev => prev.filter((_, idx) => idx !== i)) }
 
   async function handleSave() {
     setError(''); setSuccess('')
@@ -304,39 +311,67 @@ function GunlukCalisma({ userId, isMobile }) {
       topic: s.ders === 'paragraf' ? null : (s.konu || null),
       dogru: parseInt(s.dogru) || 0, yanlis: parseInt(s.yanlis) || 0, bos: parseInt(s.bos) || 0,
     }))
-    const { error } = await supabase.from('daily_study').insert(rows)
-    if (error) { setError('Kaydedilemedi: ' + error.message); return }
+    const { error: err } = await supabase.from('daily_study').insert(rows)
+    if (err) { setError('Kaydedilemedi: ' + err.message); return }
     setSuccess('Kaydedildi ✓')
     setSatirlar([{ ders: '', konu: '', dogru: '', yanlis: '', bos: '' }])
-    const { data } = await supabase.from('daily_study').select('*').eq('student_id', userId).eq('date', date).order('id')
-    setMevcutKayitlar(data || [])
+    kayitlariYukle()
+  }
+
+  function handleDuzenleAc(k) {
+    setDuzenleId(k.id)
+    setDuzenleData({ ders: k.lesson, konu: k.topic || '', dogru: k.dogru ?? 0, yanlis: k.yanlis ?? 0, bos: k.bos ?? 0 })
+    setSilOnay(null)
+  }
+
+  async function handleDuzenleSave() {
+    const { error: err } = await supabase.from('daily_study').update({
+      lesson: duzenleData.ders,
+      topic: duzenleData.ders === 'paragraf' ? null : (duzenleData.konu || null),
+      dogru: parseInt(duzenleData.dogru) || 0,
+      yanlis: parseInt(duzenleData.yanlis) || 0,
+      bos: parseInt(duzenleData.bos) || 0,
+    }).eq('id', duzenleId)
+    if (err) { setError('Güncellenemedi: ' + err.message); return }
+    setDuzenleId(null); setDuzenleData(null)
+    setSuccess('Güncellendi ✓')
+    kayitlariYukle()
+  }
+
+  async function handleSil(id) {
+    const { error: err } = await supabase.from('daily_study').delete().eq('id', id)
+    if (err) { setError('Silinemedi: ' + err.message); return }
+    setSilOnay(null)
+    setSuccess('Kayıt silindi ✓')
+    kayitlariYukle()
   }
 
   const selectStyle = {
     width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0',
     fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b', boxSizing: 'border-box',
   }
-
   const inputStyle = {
     width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0',
     textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff', boxSizing: 'border-box',
   }
 
-  // Mevcut kayıtları derse göre grupla
+  // Dersleri grupla
   const dersGruplari = GUNLUK_DERSLER_TANIM.map(d => {
     const kayitlar = mevcutKayitlar.filter(k => k.lesson === d.key)
     if (kayitlar.length === 0) return null
     const topD = kayitlar.reduce((a, k) => a + (k.dogru || 0), 0)
     const topY = kayitlar.reduce((a, k) => a + (k.yanlis || 0), 0)
     const topB = kayitlar.reduce((a, k) => a + (k.bos || 0), 0)
-    const topSoru = topD + topY + topB
-    return { key: d.key, label: d.label, kayitlar, topD, topY, topB, topSoru }
+    return { key: d.key, label: d.label, kayitlar, topD, topY, topB, topSoru: topD + topY + topB }
   }).filter(Boolean)
 
   const gunTopD = dersGruplari.reduce((a, d) => a + d.topD, 0)
   const gunTopY = dersGruplari.reduce((a, d) => a + d.topY, 0)
   const gunTopB = dersGruplari.reduce((a, d) => a + d.topB, 0)
   const gunTopSoru = gunTopD + gunTopY + gunTopB
+
+  const duzenleDersObj = duzenleData ? GUNLUK_DERSLER_TANIM.find(d => d.key === duzenleData.ders) : null
+  const duzenleKonular = duzenleDersObj?.konulu ? (KONULAR[duzenleData.ders] || []) : []
 
   return (
     <div>
@@ -347,6 +382,7 @@ function GunlukCalisma({ userId, isMobile }) {
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...selectStyle, width: 'auto' }} />
       </div>
 
+      {/* Mevcut kayıtlar */}
       {dersGruplari.length > 0 && (
         <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', marginBottom: '16px', overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', background: '#f0fdfa', borderBottom: '1px solid #e2e8f0', fontWeight: '600', color: '#0f766e', fontSize: '13px' }}>
@@ -355,7 +391,8 @@ function GunlukCalisma({ userId, isMobile }) {
 
           {dersGruplari.map(d => (
             <div key={d.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
-              {/* Ders satırı - toplam */}
+
+              {/* Ders başlığı + toplam */}
               <div style={{ padding: '10px 16px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>{d.label}</span>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -366,17 +403,75 @@ function GunlukCalisma({ userId, isMobile }) {
                   <span style={{ fontSize: '14px', fontWeight: '800', color: '#0d9488' }}>{net(d.topD, d.topY)}</span>
                 </div>
               </div>
-              {/* Konu detayları */}
-              {(d.kayitlar.length > 1 || d.kayitlar[0]?.topic) && d.kayitlar.map(k => (
-                <div key={k.id} style={{ padding: '8px 16px 8px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>{k.topic || '—'}</span>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{(k.dogru||0)+(k.yanlis||0)+(k.bos||0)} soru</span>
-                    <span style={{ fontSize: '11px', color: '#10b981' }}>D:{k.dogru}</span>
-                    <span style={{ fontSize: '11px', color: '#ef4444' }}>Y:{k.yanlis}</span>
-                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>B:{k.bos}</span>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#0d9488' }}>{net(k.dogru, k.yanlis)}</span>
-                  </div>
+
+              {/* Her kayıt satırı — HEPSİ gösterilir */}
+              {d.kayitlar.map(k => (
+                <div key={k.id}>
+                  {duzenleId === k.id ? (
+                    /* Düzenleme formu */
+                    <div style={{ padding: '14px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                        <select value={duzenleData.ders} onChange={e => setDuzenleData(p => ({ ...p, ders: e.target.value, konu: '' }))} style={selectStyle}>
+                          {GUNLUK_DERSLER_TANIM.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+                        </select>
+                        {duzenleDersObj?.konulu && (
+                          <select value={duzenleData.konu} onChange={e => setDuzenleData(p => ({ ...p, konu: e.target.value }))} style={selectStyle}>
+                            <option value="">Konu seç</option>
+                            {duzenleKonular.map(kk => <option key={kk} value={kk}>{kk}</option>)}
+                          </select>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[
+                            { key: 'dogru', label: 'Doğru ✅', color: '#10b981' },
+                            { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' },
+                            { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' },
+                          ].map(alan => (
+                            <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
+                              <input type="number" min="0" value={duzenleData[alan.key]}
+                                onChange={e => setDuzenleData(p => ({ ...p, [alan.key]: e.target.value }))}
+                                style={inputStyle} />
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: '600', color: '#0d9488', textAlign: 'center' }}>Net 🎯</label>
+                            <div style={{ padding: '10px', borderRadius: '8px', background: '#f0fdfa', textAlign: 'center', fontSize: '16px', fontWeight: '700', color: '#0d9488' }}>
+                              {net(parseInt(duzenleData.dogru) || 0, parseInt(duzenleData.yanlis) || 0)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={handleDuzenleSave} style={{ flex: 1, padding: '9px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '13px', fontFamily: font.family }}>Kaydet</button>
+                        <button onClick={() => { setDuzenleId(null); setDuzenleData(null) }} style={{ flex: 1, padding: '9px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontFamily: font.family }}>İptal</button>
+                      </div>
+                    </div>
+                  ) : silOnay === k.id ? (
+                    /* Silme onayı */
+                    <div style={{ padding: '12px 16px', background: '#fef2f2', borderTop: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '600' }}>Bu kayıt silinsin mi?</span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => handleSil(k.id)} style={{ padding: '7px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '13px', fontFamily: font.family }}>Evet, Sil</button>
+                        <button onClick={() => setSilOnay(null)} style={{ padding: '7px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontFamily: font.family }}>İptal</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Normal satır — BUTON HER ZAMAN GÖRÜNÜR */
+                    <div style={{ padding: '8px 16px 8px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '6px' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>
+                        {k.topic || (k.lesson === 'paragraf' ? 'Paragraf' : '—')}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>{(k.dogru||0)+(k.yanlis||0)+(k.bos||0)} soru</span>
+                        <span style={{ fontSize: '11px', color: '#10b981' }}>D:{k.dogru}</span>
+                        <span style={{ fontSize: '11px', color: '#ef4444' }}>Y:{k.yanlis}</span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>B:{k.bos}</span>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: '#0d9488' }}>{net(k.dogru||0, k.yanlis||0)}</span>
+                        <button onClick={() => handleDuzenleAc(k)} style={{ padding: '4px 10px', background: '#f0fdfa', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#0d9488', fontWeight: '600', fontFamily: font.family }}>✏️ Düzenle</button>
+                        <button onClick={() => { setSilOnay(k.id); setDuzenleId(null); setDuzenleData(null) }} style={{ padding: '4px 10px', background: '#fef2f2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#ef4444', fontWeight: '600', fontFamily: font.family }}>🗑️ Sil</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -396,6 +491,7 @@ function GunlukCalisma({ userId, isMobile }) {
         </div>
       )}
 
+      {/* Yeni kayıt */}
       <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontWeight: '600', color: '#64748b', marginBottom: '16px', fontSize: '13px' }}>Yeni Kayıt</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -407,7 +503,7 @@ function GunlukCalisma({ userId, isMobile }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Kayıt {i + 1}</span>
                   {satirlar.length > 1 && (
-                    <button onClick={() => handleSil(i)} style={{ background: '#fef2f2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px' }}>Sil</button>
+                    <button onClick={() => handleSatirSil(i)} style={{ background: '#fef2f2', border: 'none', color: '#ef4444', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px' }}>Sil</button>
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -511,7 +607,6 @@ function Gelisim({ userId, studentName, isMobile }) {
   return (
     <div>
       <h2 style={{ color: '#1e293b', marginBottom: '16px', fontSize: isMobile ? '18px' : '22px' }}>📈 Gelişimim</h2>
-
       {results.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
           <div style={{ background: '#f0fdfa', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>

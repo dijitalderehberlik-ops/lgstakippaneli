@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, input, buton } from '../styles'
 
-const DERSLER = ['turkce', 'matematik', 'fen', 'inkılap', 'ingilizce', 'din']
-const DERS_LABEL = { turkce: 'Türkçe', matematik: 'Matematik', fen: 'Fen', inkılap: 'İnkılap', ingilizce: 'İngilizce', din: 'Din' }
+const DERSLER = ['turkce', 'inkılap', 'din', 'ingilizce', 'matematik', 'fen']
+const DERS_LABEL = { turkce: 'Türkçe', inkılap: 'İnkılap', din: 'Din', ingilizce: 'İngilizce', matematik: 'Matematik', fen: 'Fen' }
 
 function net(d, y) { return (d - y / 3).toFixed(2) }
 
@@ -14,7 +14,6 @@ export default function ExamEntry() {
     <div style={{ fontFamily: font.family }}>
       <h2 style={{ color: renk.gray800, marginBottom: '24px' }}>Deneme Gir</h2>
 
-      {/* Sekme seçimi */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
         {[
           { key: 'ortak', label: '👥 Ortak Deneme' },
@@ -133,7 +132,6 @@ function OrtakDeneme() {
 
   return (
     <div>
-      {/* Düzenleme modalı */}
       {editExam && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0005', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: renk.white, padding: '32px', borderRadius: '16px', width: '400px', boxShadow: renk.shadow }}>
@@ -150,7 +148,6 @@ function OrtakDeneme() {
         </div>
       )}
 
-      {/* Yeni deneme oluştur */}
       <div style={{ background: renk.white, padding: '24px', borderRadius: '14px', border: `1px solid ${renk.gray200}`, marginBottom: '24px', maxWidth: '480px' }}>
         <h3 style={{ marginBottom: '20px', color: renk.gray800 }}>Yeni Ortak Deneme Oluştur</h3>
         <input placeholder="Deneme adı" value={newExamName} onChange={e => setNewExamName(e.target.value)} style={input} />
@@ -160,7 +157,6 @@ function OrtakDeneme() {
         <button onClick={handleAddExam} style={buton.primary}>Oluştur</button>
       </div>
 
-      {/* Deneme listesi */}
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '600px', marginBottom: '32px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
@@ -188,7 +184,6 @@ function OrtakDeneme() {
         </table>
       </div>
 
-      {/* Sonuç giriş */}
       <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <label style={{ fontWeight: '600', color: renk.gray600 }}>Sonuç Gir:</label>
         <select value={selectedExam} onChange={e => handleExamSelect(e.target.value)} style={{ ...selectStyle, minWidth: '280px' }}>
@@ -277,7 +272,6 @@ function BireyselDeneme() {
     if (!selectedStudent) { setError('Öğrenci seçin'); return }
     if (!examName) { setError('Deneme adı girin'); return }
 
-    // Denemeyi oluştur
     const { data: examData, error: examError } = await supabase
       .from('exams')
       .insert({ name: examName, date: examDate, type: 'individual' })
@@ -286,7 +280,6 @@ function BireyselDeneme() {
 
     if (examError) { setError('Deneme oluşturulamadı: ' + examError.message); return }
 
-    // Sonucu kaydet
     const row = {
       student_id: selectedStudent,
       exam_id: examData.id,
@@ -323,7 +316,6 @@ function BireyselDeneme() {
         <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={input} />
       </div>
 
-      {/* Sonuç girişi */}
       <div style={{ background: renk.white, borderRadius: '14px', border: `1px solid ${renk.gray200}`, overflow: 'hidden', maxWidth: '620px', marginBottom: '20px' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
