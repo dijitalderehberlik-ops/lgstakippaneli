@@ -136,78 +136,278 @@ function PageContent({ page, userId, studentName, isMobile }) {
   return null
 }
 
+// ─── BİREYSEL DENEME FORMU ───────────────────────────────────────────────────
+function BireyselDenemeForm({ userId, onClose, onSaved, editData }) {
+  const bos = { ad: '', tarih: new Date().toISOString().split('T')[0], ...DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: '', [`${d.key}_y`]: '' }), {}) }
+  const [form, setForm] = useState(editData || bos)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function handleChange(key, val) { setForm(p => ({ ...p, [key]: val })) }
+
+  async function handleSave() {
+    setError('')
+    if (!form.ad.trim()) { setError('Deneme adı zorunlu'); return }
+    if (!form.tarih) { setError('Tarih zorunlu'); return }
+    setSaving(true)
+
+    if (editData) {
+      // Güncelleme: exam adı/tarihi güncelle, result güncelle
+      const { error: e1 } = await supabase.from('exams').update({ name: form.ad, date: form.tarih }).eq('id', editData.examId)
+      if (e1) { setError('Güncellenemedi: ' + e1.message); setSaving(false); return }
+      const row = DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: parseInt(form[`${d.key}_d`]) || 0, [`${d.key}_y`]: parseInt(form[`${d.key}_y`]) || 0, [`${d.key}_b`]: 0 }), {})
+      const { error: e2 } = await supabase.from('exam_results').update(row).eq('id', editData.resultId)
+      if (e2) { setError('Güncellenemedi: ' + e2.message); setSaving(false); return }
+    } else {
+      // Yeni kayıt
+      const { data: examData, error: e1 } = await supabase.from('exams').insert({ name: form.ad, date: form.tarih, type: 'individual' }).select().single()
+      if (e1) { setError('Deneme oluşturulamadı: ' + e1.message); setSaving(false); return }
+      const row = { student_id: userId, exam_id: examData.id, ...DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: parseInt(form[`${d.key}_d`]) || 0, [`${d.key}_y`]: parseInt(form[`${d.key}_y`]) || 0, [`${d.key}_b`]: 0 }), {}) }
+      const { error: e2 } = await supabase.from('exam_results').insert(row)
+      if (e2) { setError('Kaydedilemedi: ' + e2.message); setSaving(false); return }
+    }
+
+    setSaving(false)
+    onSaved()
+  }
+
+  const inputS = { padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: font.family, width: '100%', boxSizing: 'border-box', color: '#1e293b' }
+  const numS = { padding: '10px 4px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '15px', fontFamily: font.family, width: '100%', boxSizing: 'border-box' }
+
+  const topD = DERSLER.reduce((a, d) => a + (parseInt(form[`${d.key}_d`]) || 0), 0)
+  const topY = DERSLER.reduce((a, d) => a + (parseInt(form[`${d.key}_y`]) || 0), 0)
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0007', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 200, overflowY: 'auto', padding: '24px' }}>
+      <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '520px', margin: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, color: '#1e293b' }}>{editData ? '✏️ Deneme Düzenle' : '➕ Bireysel Deneme Ekle'}</h3>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', color: '#64748b', fontFamily: font.family }}>✕</button>
+        </div>
+        <div style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Deneme Adı *</label>
+              <input value={form.ad} onChange={e => handleChange('ad', e.target.value)} placeholder="örn: Karekök Deneme 5" style={inputS} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Tarih *</label>
+              <input type="date" value={form.tarih} onChange={e => handleChange('tarih', e.target.value)} style={{ ...inputS, width: 'auto' }} />
+            </div>
+          </div>
+
+          <div style={{ background: '#f8fafc', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', padding: '8px 12px', background: '#e2e8f0', gap: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>DERS</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#10b981', textAlign: 'center' }}>DOĞRU</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#ef4444', textAlign: 'center' }}>YANLIŞ</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#0d9488', textAlign: 'center' }}>NET</span>
+            </div>
+            {DERSLER.map(d => {
+              const dd = parseInt(form[`${d.key}_d`]) || 0
+              const yy = parseInt(form[`${d.key}_y`]) || 0
+              return (
+                <div key={d.key} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', padding: '8px 12px', borderTop: '1px solid #e2e8f0', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#1e293b' }}>{d.label}</span>
+                  <input type="number" min="0" value={form[`${d.key}_d`]} onChange={e => handleChange(`${d.key}_d`, e.target.value)} style={numS} />
+                  <input type="number" min="0" value={form[`${d.key}_y`]} onChange={e => handleChange(`${d.key}_y`, e.target.value)} style={numS} />
+                  <div style={{ background: '#f0fdfa', borderRadius: '6px', padding: '10px 4px', textAlign: 'center', fontSize: '14px', fontWeight: '700', color: '#0d9488' }}>{net(dd, yy)}</div>
+                </div>
+              )
+            })}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', padding: '10px 12px', background: '#0d9488', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff' }}>Toplam</span>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff', textAlign: 'center' }}>{topD}</span>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff', textAlign: 'center' }}>{topY}</span>
+              <span style={{ fontSize: '15px', fontWeight: '800', color: '#fff', textAlign: 'center' }}>{net(topD, topY)}</span>
+            </div>
+          </div>
+
+          {error && <div style={{ background: '#fef2f2', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '12px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '15px', fontFamily: font.family }}>
+              {saving ? 'Kaydediliyor...' : '💾 Kaydet'}
+            </button>
+            <button onClick={onClose} style={{ padding: '12px 20px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '10px', cursor: 'pointer', fontFamily: font.family }}>İptal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── DENEMELERİM ─────────────────────────────────────────────────────────────
 function Denemelerim({ userId, isMobile }) {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
+  const [formAcik, setFormAcik] = useState(false)
+  const [editData, setEditData] = useState(null)
+  const [silOnay, setSilOnay] = useState(null)
+  const [filtre, setFiltre] = useState('tumu') // tumu | ortak | bireysel
 
-  useEffect(() => {
-    if (!userId) return
-    supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', userId).order('exams(date)', { ascending: false })
-      .then(({ data }) => { setResults(data || []); setLoading(false) })
-  }, [userId])
+  useEffect(() => { if (userId) yukle() }, [userId])
+
+  async function yukle() {
+    const { data } = await supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', userId)
+    setResults(data || [])
+    setLoading(false)
+  }
+
+  async function handleSil(r) {
+    // Bireysel denemede exam kaydını da sil
+    await supabase.from('exam_results').delete().eq('id', r.id)
+    if (r.exams?.type === 'individual') {
+      await supabase.from('exams').delete().eq('id', r.exam_id)
+    }
+    setSilOnay(null)
+    yukle()
+  }
+
+  function handleDuzenle(r) {
+    setEditData({
+      examId: r.exam_id,
+      resultId: r.id,
+      ad: r.exams?.name || '',
+      tarih: r.exams?.date || '',
+      ...DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: r[`${d.key}_d`] || 0, [`${d.key}_y`]: r[`${d.key}_y`] || 0 }), {}),
+    })
+    setFormAcik(true)
+  }
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
 
-  const tumDenemeler = [...results].sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))
+  const filtrelenmis = [...results]
+    .filter(r => filtre === 'tumu' ? true : filtre === 'ortak' ? r.exams?.type === 'common' : r.exams?.type === 'individual')
+    .sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))
 
   return (
     <div>
-      <h2 style={{ color: '#1e293b', marginBottom: '20px', fontSize: isMobile ? '18px' : '22px' }}>📝 Denemelerim</h2>
-      {results.length === 0 ? <p style={{ color: renk.gray400 }}>Henüz deneme sonucun yok.</p> : (
-        isMobile ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {tumDenemeler.map(r => (
-              <div key={r.id} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>{r.exams?.name}</div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{r.exams?.date}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '22px', fontWeight: '800', color: '#0d9488' }}>{toplamNet(r).toFixed(1)}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>toplam net</div>
-                  </div>
+      {(formAcik) && (
+        <BireyselDenemeForm
+          userId={userId}
+          editData={editData}
+          onClose={() => { setFormAcik(false); setEditData(null) }}
+          onSaved={() => { setFormAcik(false); setEditData(null); yukle() }}
+        />
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <h2 style={{ color: '#1e293b', margin: 0, fontSize: isMobile ? '18px' : '22px' }}>📝 Denemelerim</h2>
+        <button onClick={() => { setEditData(null); setFormAcik(true) }} style={{ padding: '9px 18px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', fontFamily: font.family }}>
+          ➕ Bireysel Deneme Ekle
+        </button>
+      </div>
+
+      {/* Filtre */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        {[{ key: 'tumu', label: 'Tümü' }, { key: 'ortak', label: '👥 Ortak' }, { key: 'bireysel', label: '👤 Bireysel' }].map(f => (
+          <button key={f.key} onClick={() => setFiltre(f.key)} style={{
+            padding: '7px 16px', border: 'none', borderRadius: '20px', cursor: 'pointer', fontFamily: font.family, fontSize: '13px',
+            background: filtre === f.key ? '#0d9488' : '#f1f5f9',
+            color: filtre === f.key ? '#fff' : '#64748b',
+            fontWeight: filtre === f.key ? '700' : '400',
+          }}>{f.label}</button>
+        ))}
+      </div>
+
+      {filtrelenmis.length === 0 ? (
+        <p style={{ color: renk.gray400 }}>Henüz deneme sonucu yok.</p>
+      ) : isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filtrelenmis.map(r => (
+            <div key={r.id} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div>
+                  <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>{r.exams?.name}</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{r.exams?.date}</div>
+                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: r.exams?.type === 'common' ? '#f0fdfa' : '#fff7ed', color: r.exams?.type === 'common' ? '#0d9488' : '#ea580c', fontWeight: '600', display: 'inline-block', marginTop: '4px' }}>
+                    {r.exams?.type === 'common' ? 'Ortak' : 'Bireysel'}
+                  </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                  {DERSLER.map(d => (
-                    <div key={d.key} style={{ background: '#f8fafc', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>{d.label}</div>
-                      <div style={{ fontWeight: '700', color: '#0d9488', fontSize: '15px' }}>{net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0)}</div>
-                    </div>
-                  ))}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: '#0d9488' }}>{toplamNet(r).toFixed(1)}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>toplam net</div>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Deneme</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Tarih</th>
-                  {DERSLER.map(d => <th key={d.key} style={{ padding: '12px 10px', textAlign: 'center', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>{d.label}</th>)}
-                  <th style={{ padding: '12px 16px', textAlign: 'center', color: '#0d9488', fontWeight: '600', fontSize: '13px' }}>Toplam</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tumDenemeler.map(r => (
-                  <tr key={r.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{r.exams?.name}</td>
-                    <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{r.exams?.date}</td>
-                    {DERSLER.map(d => <td key={d.key} style={{ padding: '12px 10px', textAlign: 'center', color: '#64748b' }}>{net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0)}</td>)}
-                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#0d9488' }}>{toplamNet(r).toFixed(2)}</td>
-                  </tr>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '10px' }}>
+                {DERSLER.map(d => (
+                  <div key={d.key} style={{ background: '#f8fafc', borderRadius: '8px', padding: '7px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>{d.label}</div>
+                    <div style={{ fontWeight: '700', color: '#0d9488', fontSize: '14px' }}>{net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0)}</div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )
+              </div>
+              {r.exams?.type === 'individual' && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {silOnay === r.id ? (
+                    <>
+                      <span style={{ fontSize: '12px', color: '#ef4444', alignSelf: 'center' }}>Silinsin mi?</span>
+                      <button onClick={() => handleSil(r)} style={{ padding: '6px 14px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '700' }}>Evet</button>
+                      <button onClick={() => setSilOnay(null)} style={{ padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family }}>İptal</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => handleDuzenle(r)} style={{ flex: 1, padding: '8px', background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0d9488', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '600' }}>✏️ Düzenle</button>
+                      <button onClick={() => setSilOnay(r.id)} style={{ flex: 1, padding: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '600' }}>🗑️ Sil</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Deneme</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Tarih</th>
+                <th style={{ padding: '12px 10px', textAlign: 'center', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Tür</th>
+                {DERSLER.map(d => <th key={d.key} style={{ padding: '12px 10px', textAlign: 'center', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>{d.label}</th>)}
+                <th style={{ padding: '12px 16px', textAlign: 'center', color: '#0d9488', fontWeight: '600', fontSize: '13px' }}>Toplam</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrelenmis.map(r => (
+                <tr key={r.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '12px 16px', color: '#1e293b', fontWeight: '500' }}>{r.exams?.name}</td>
+                  <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{r.exams?.date}</td>
+                  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: r.exams?.type === 'common' ? '#f0fdfa' : '#fff7ed', color: r.exams?.type === 'common' ? '#0d9488' : '#ea580c', fontWeight: '600' }}>
+                      {r.exams?.type === 'common' ? 'Ortak' : 'Bireysel'}
+                    </span>
+                  </td>
+                  {DERSLER.map(d => <td key={d.key} style={{ padding: '12px 10px', textAlign: 'center', color: '#64748b' }}>{net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0)}</td>)}
+                  <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#0d9488' }}>{toplamNet(r).toFixed(2)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    {r.exams?.type === 'individual' && (
+                      silOnay === r.id ? (
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', color: '#ef4444' }}>Silinsin mi?</span>
+                          <button onClick={() => handleSil(r)} style={{ padding: '4px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '700' }}>Evet</button>
+                          <button onClick={() => setSilOnay(null)} style={{ padding: '4px 10px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family }}>İptal</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button onClick={() => handleDuzenle(r)} style={{ padding: '5px 12px', background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0d9488', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '600' }}>✏️</button>
+                          <button onClick={() => setSilOnay(r.id)} style={{ padding: '5px 12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: font.family, fontWeight: '600' }}>🗑️</button>
+                        </div>
+                      )
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
 }
 
+// ─── SINIF KARŞILAŞTIRMA ─────────────────────────────────────────────────────
 function SinifKarsilastirma({ userId, isMobile }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -270,6 +470,7 @@ function SinifKarsilastirma({ userId, isMobile }) {
   )
 }
 
+// ─── GÜNLÜK ÇALIŞMA ───────────────────────────────────────────────────────────
 function GunlukCalisma({ userId, isMobile }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [satirlar, setSatirlar] = useState([{ ders: '', konu: '', dogru: '', yanlis: '', bos: '' }])
@@ -346,16 +547,9 @@ function GunlukCalisma({ userId, isMobile }) {
     kayitlariYukle()
   }
 
-  const selectStyle = {
-    width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0',
-    fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b', boxSizing: 'border-box',
-  }
-  const inputStyle = {
-    width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0',
-    textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff', boxSizing: 'border-box',
-  }
+  const selectStyle = { width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '14px', fontFamily: font.family, background: '#fff', color: '#1e293b', boxSizing: 'border-box' }
+  const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '16px', fontFamily: font.family, background: '#fff', boxSizing: 'border-box' }
 
-  // Dersleri grupla
   const dersGruplari = GUNLUK_DERSLER_TANIM.map(d => {
     const kayitlar = mevcutKayitlar.filter(k => k.lesson === d.key)
     if (kayitlar.length === 0) return null
@@ -382,17 +576,11 @@ function GunlukCalisma({ userId, isMobile }) {
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...selectStyle, width: 'auto' }} />
       </div>
 
-      {/* Mevcut kayıtlar */}
       {dersGruplari.length > 0 && (
         <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', marginBottom: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', background: '#f0fdfa', borderBottom: '1px solid #e2e8f0', fontWeight: '600', color: '#0f766e', fontSize: '13px' }}>
-            Bu tarihe ait kayıtlar
-          </div>
-
+          <div style={{ padding: '12px 16px', background: '#f0fdfa', borderBottom: '1px solid #e2e8f0', fontWeight: '600', color: '#0f766e', fontSize: '13px' }}>Bu tarihe ait kayıtlar</div>
           {dersGruplari.map(d => (
             <div key={d.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
-
-              {/* Ders başlığı + toplam */}
               <div style={{ padding: '10px 16px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>{d.label}</span>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -403,12 +591,9 @@ function GunlukCalisma({ userId, isMobile }) {
                   <span style={{ fontSize: '14px', fontWeight: '800', color: '#0d9488' }}>{net(d.topD, d.topY)}</span>
                 </div>
               </div>
-
-              {/* Her kayıt satırı — HEPSİ gösterilir */}
               {d.kayitlar.map(k => (
                 <div key={k.id}>
                   {duzenleId === k.id ? (
-                    /* Düzenleme formu */
                     <div style={{ padding: '14px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                         <select value={duzenleData.ders} onChange={e => setDuzenleData(p => ({ ...p, ders: e.target.value, konu: '' }))} style={selectStyle}>
@@ -421,16 +606,10 @@ function GunlukCalisma({ userId, isMobile }) {
                           </select>
                         )}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                          {[
-                            { key: 'dogru', label: 'Doğru ✅', color: '#10b981' },
-                            { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' },
-                            { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' },
-                          ].map(alan => (
+                          {[{ key: 'dogru', label: 'Doğru ✅', color: '#10b981' }, { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' }, { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' }].map(alan => (
                             <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
-                              <input type="number" min="0" value={duzenleData[alan.key]}
-                                onChange={e => setDuzenleData(p => ({ ...p, [alan.key]: e.target.value }))}
-                                style={inputStyle} />
+                              <input type="number" min="0" value={duzenleData[alan.key]} onChange={e => setDuzenleData(p => ({ ...p, [alan.key]: e.target.value }))} style={inputStyle} />
                             </div>
                           ))}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -447,7 +626,6 @@ function GunlukCalisma({ userId, isMobile }) {
                       </div>
                     </div>
                   ) : silOnay === k.id ? (
-                    /* Silme onayı */
                     <div style={{ padding: '12px 16px', background: '#fef2f2', borderTop: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '600' }}>Bu kayıt silinsin mi?</span>
                       <div style={{ display: 'flex', gap: '8px' }}>
@@ -456,11 +634,8 @@ function GunlukCalisma({ userId, isMobile }) {
                       </div>
                     </div>
                   ) : (
-                    /* Normal satır — BUTON HER ZAMAN GÖRÜNÜR */
                     <div style={{ padding: '8px 16px 8px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '6px' }}>
-                      <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>
-                        {k.topic || (k.lesson === 'paragraf' ? 'Paragraf' : '—')}
-                      </span>
+                      <span style={{ fontSize: '12px', color: '#64748b', flex: 1 }}>{k.topic || (k.lesson === 'paragraf' ? 'Paragraf' : '—')}</span>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '11px', color: '#94a3b8' }}>{(k.dogru||0)+(k.yanlis||0)+(k.bos||0)} soru</span>
                         <span style={{ fontSize: '11px', color: '#10b981' }}>D:{k.dogru}</span>
@@ -476,8 +651,6 @@ function GunlukCalisma({ userId, isMobile }) {
               ))}
             </div>
           ))}
-
-          {/* Günlük toplam */}
           <div style={{ padding: '12px 16px', background: '#0d9488', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Günlük Toplam</span>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -491,7 +664,6 @@ function GunlukCalisma({ userId, isMobile }) {
         </div>
       )}
 
-      {/* Yeni kayıt */}
       <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontWeight: '600', color: '#64748b', marginBottom: '16px', fontSize: '13px' }}>Yeni Kayıt</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -518,11 +690,7 @@ function GunlukCalisma({ userId, isMobile }) {
                     </select>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    {[
-                      { key: 'dogru', label: 'Doğru ✅', color: '#10b981' },
-                      { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' },
-                      { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' },
-                    ].map(alan => (
+                    {[{ key: 'dogru', label: 'Doğru ✅', color: '#10b981' }, { key: 'yanlis', label: 'Yanlış ❌', color: '#ef4444' }, { key: 'bos', label: 'Boş ⬜', color: '#94a3b8' }].map(alan => (
                       <div key={alan.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <label style={{ fontSize: '11px', fontWeight: '600', color: alan.color, textAlign: 'center' }}>{alan.label}</label>
                         <input type="number" min="0" value={satir[alan.key]} onChange={e => handleSatirChange(i, alan.key, e.target.value)} style={inputStyle} />
@@ -550,10 +718,12 @@ function GunlukCalisma({ userId, isMobile }) {
   )
 }
 
+// ─── GELİŞİM ─────────────────────────────────────────────────────────────────
 function Gelisim({ userId, studentName, isMobile }) {
   const [results, setResults] = useState([])
   const [dailyStudy, setDailyStudy] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filtre, setFiltre] = useState('tumu') // tumu | ortak | bireysel
 
   useEffect(() => {
     if (!userId) return
@@ -569,12 +739,16 @@ function Gelisim({ userId, studentName, isMobile }) {
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
 
-  const tumDenemeler = [...results].sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))
-  const sonResult = tumDenemeler[tumDenemeler.length - 1]
-  const ilkNet = results.length > 0 ? toplamNet(tumDenemeler[0]) : 0
-  const sonNet = results.length > 0 ? toplamNet(sonResult) : 0
+  // Filtreye göre denemeler
+  const filtrelenmis = [...results]
+    .filter(r => filtre === 'tumu' ? true : filtre === 'ortak' ? r.exams?.type === 'common' : r.exams?.type === 'individual')
+    .sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))
+
+  const sonResult = filtrelenmis[filtrelenmis.length - 1]
+  const ilkNet = filtrelenmis.length > 0 ? toplamNet(filtrelenmis[0]) : 0
+  const sonNet = filtrelenmis.length > 0 ? toplamNet(sonResult) : 0
   const toplamFark = parseFloat((sonNet - ilkNet).toFixed(2))
-  const trendData = tumDenemeler.map(r => ({ name: r.exams?.name, net: parseFloat(toplamNet(r).toFixed(2)) }))
+  const trendData = filtrelenmis.map(r => ({ name: r.exams?.name, net: parseFloat(toplamNet(r).toFixed(2)) }))
 
   function konuSkoru(dogru, yanlis, bos) {
     const toplam = dogru + yanlis + bos
@@ -606,8 +780,21 @@ function Gelisim({ userId, studentName, isMobile }) {
 
   return (
     <div>
-      <h2 style={{ color: '#1e293b', marginBottom: '16px', fontSize: isMobile ? '18px' : '22px' }}>📈 Gelişimim</h2>
-      {results.length > 0 && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <h2 style={{ color: '#1e293b', margin: 0, fontSize: isMobile ? '18px' : '22px' }}>📈 Gelişimim</h2>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[{ key: 'tumu', label: 'Tümü' }, { key: 'ortak', label: '👥 Ortak' }, { key: 'bireysel', label: '👤 Bireysel' }].map(f => (
+            <button key={f.key} onClick={() => setFiltre(f.key)} style={{
+              padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer', fontFamily: font.family, fontSize: '12px',
+              background: filtre === f.key ? '#0d9488' : '#f1f5f9',
+              color: filtre === f.key ? '#fff' : '#64748b',
+              fontWeight: filtre === f.key ? '700' : '400',
+            }}>{f.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtrelenmis.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
           <div style={{ background: '#f0fdfa', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
             <div style={{ fontSize: '24px', fontWeight: '800', color: '#0d9488' }}>{sonNet.toFixed(1)}</div>
@@ -618,7 +805,7 @@ function Gelisim({ userId, studentName, isMobile }) {
             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Gelişim</div>
           </div>
           <div style={{ background: '#fff7ed', borderRadius: '14px', padding: '16px', textAlign: 'center', gridColumn: isMobile ? '1 / -1' : 'auto' }}>
-            <div style={{ fontSize: '24px', fontWeight: '800', color: '#ea580c' }}>{results.length}</div>
+            <div style={{ fontSize: '24px', fontWeight: '800', color: '#ea580c' }}>{filtrelenmis.length}</div>
             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Deneme</div>
           </div>
         </div>
@@ -659,6 +846,12 @@ function Gelisim({ userId, studentName, isMobile }) {
               <Line type="monotone" dataKey="net" stroke="#0d9488" strokeWidth={3} dot={{ fill: '#0d9488', r: 5, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {filtrelenmis.length === 0 && (
+        <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+          Bu filtrede henüz deneme verisi yok.
         </div>
       )}
     </div>
