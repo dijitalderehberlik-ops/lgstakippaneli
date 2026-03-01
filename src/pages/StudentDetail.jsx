@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, buton } from '../styles'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ZAxis, ReferenceLine } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ZAxis, ReferenceLine, PieChart, Pie, Legend } from 'recharts'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe' },
@@ -320,10 +320,22 @@ const AYLAR = [
   { value: '05', label: 'Mayıs' }, { value: '06', label: 'Haziran' },
 ]
 
-function KonuAnalizi({ dailyStudy }) {
-  const bugun = new Date()
-  const bugunAy = bugun.getMonth() + 1
+function formatTarih(isoStr) {
+  if (!isoStr) return ''
+  const [y, m, d] = isoStr.split('-')
+  return `${d}.${m}.${y}`
+}
+
+const DERS_LABEL = { turkce: 'Türkçe', matematik: 'Matematik', fen: 'Fen', inkılap: 'İnkılap', ingilizce: 'İngilizce', din: 'Din', paragraf: 'Paragraf' }
+const DERS_RENK = { turkce: '#0d9488', matematik: '#6366f1', fen: '#f59e0b', inkılap: '#ec4899', ingilizce: '#10b981', din: '#8b5cf6', paragraf: '#64748b' }
+
+function GunlukTakvim({ dailyStudy, bransDenemeleri }) {
+  const bugunObj = new Date()
+  const bugunAy = bugunObj.getMonth() + 1
+  const bugunStr = bugunObj.toISOString().split('T')[0]
+
   const [seciliAy, setSeciliAy] = useState(String(bugunAy).padStart(2, '0'))
+  const [seciliGun, setSeciliGun] = useState(null) // 'YYYY-MM-DD'
 
   function ayYil(ayStr) {
     const ay = parseInt(ayStr)
@@ -333,22 +345,226 @@ function KonuAnalizi({ dailyStudy }) {
   }
 
   const yil = ayYil(seciliAy)
-  const bugunStr = new Date().toISOString().split('T')[0]
-
-  const ayVerisi = dailyStudy.filter(k => {
-    const [ky, km] = k.date.split('-')
-    return ky === String(yil) && km === seciliAy
-  })
   const ayGunSayisi = new Date(yil, parseInt(seciliAy), 0).getDate()
   const ilkGunHaftaIci = new Date(yil, parseInt(seciliAy) - 1, 1).getDay()
 
-  const takvimVerisi = {}
-  ayVerisi.forEach(k => {
-    const gun = parseInt(k.date.split('-')[2])
-    if (!takvimVerisi[gun]) takvimVerisi[gun] = 0
-    takvimVerisi[gun] += (k.dogru || 0) + (k.yanlis || 0) + (k.bos || 0)
-  })
+  // Takvim verisi: günlük çalışma + branş denemeleri
+  const takvimVerisi = useMemo(() => {
+    const map = {}
+    dailyStudy.filter(k => {
+      const [ky, km] = k.date.split('-')
+      return ky === String(yil) && km === seciliAy
+    }).forEach(k => {
+      const gun = k.date.split('-')[2]
+      if (!map[gun]) map[gun] = 0
+      map[gun] += (k.dogru || 0) + (k.yanlis || 0) + (k.bos || 0)
+    })
+    bransDenemeleri.filter(b => {
+      const [ky, km] = b.tarih.split('-')
+      return ky === String(yil) && km === seciliAy
+    }).forEach(b => {
+      const gun = b.tarih.split('-')[2]
+      if (!map[gun]) map[gun] = 0
+      map[gun] += (b.dogru || 0) + (b.yanlis || 0) + (b.bos || 0)
+    })
+    return map
+  }, [dailyStudy, bransDenemeleri, yil, seciliAy])
 
+  // Seçili günün kayıtları
+  const gunKayitlari = useMemo(() => {
+    if (!seciliGun) return null
+    const gunluk = dailyStudy.filter(k => k.date === seciliGun).map(k => ({
+      tip: 'gunluk',
+      ders: k.lesson,
+      konu: k.topic || '—',
+      dogru: k.dogru || 0,
+      yanlis: k.yanlis || 0,
+      bos: k.bos || 0,
+    }))
+    const brans = bransDenemeleri.filter(b => b.tarih === seciliGun).map(b => ({
+      tip: 'brans',
+      ders: b.brans,
+      konu: b.ad,
+      dogru: b.dogru || 0,
+      yanlis: b.yanlis || 0,
+      bos: b.bos || 0,
+    }))
+    return [...gunluk, ...brans]
+  }, [seciliGun, dailyStudy, bransDenemeleri])
+
+  function oncekiAy() {
+    const idx = AYLAR.findIndex(a => a.value === seciliAy)
+    if (idx > 0) { setSeciliAy(AYLAR[idx - 1].value); setSeciliGun(null) }
+  }
+  function sonrakiAy() {
+    const idx = AYLAR.findIndex(a => a.value === seciliAy)
+    if (idx < AYLAR.length - 1) { setSeciliAy(AYLAR[idx + 1].value); setSeciliGun(null) }
+  }
+
+  function gunRenk(gun) {
+    if (!gun) return 'transparent'
+    const tarihStr = `${yil}-${seciliAy}-${gun}`
+    const gelecek = tarihStr > bugunStr
+    const sayi = takvimVerisi[gun] || 0
+    if (gelecek) return sayi > 0 ? '#5eead4' : '#e2e8f0'
+    if (sayi === 0) return '#fecaca'
+    if (sayi < 30) return '#ccfbf1'
+    if (sayi < 80) return '#5eead4'
+    return '#0d9488'
+  }
+
+  function gunYaziRenk(gun) {
+    if (!gun) return '#64748b'
+    const tarihStr = `${yil}-${seciliAy}-${gun}`
+    const gelecek = tarihStr > bugunStr
+    const sayi = takvimVerisi[gun] || 0
+    if (!gelecek && sayi === 0) return '#ef4444'
+    if (sayi >= 80) return '#fff'
+    return '#1e293b'
+  }
+
+  const haftaGunleri = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt']
+  const takvimHucreler = []
+  for (let i = 0; i < ilkGunHaftaIci; i++) takvimHucreler.push(null)
+  for (let i = 1; i <= ayGunSayisi; i++) takvimHucreler.push(String(i).padStart(2, '0'))
+
+  const seciliAyLabel = AYLAR.find(a => a.value === seciliAy)?.label || ''
+  const ayIdx = AYLAR.findIndex(a => a.value === seciliAy)
+
+  return (
+    <div>
+      {/* Ay navigasyonu */}
+      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <button onClick={oncekiAy} disabled={ayIdx === 0} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: ayIdx === 0 ? '#f8fafc' : '#fff', cursor: ayIdx === 0 ? 'not-allowed' : 'pointer', fontSize: '16px', color: ayIdx === 0 ? '#cbd5e1' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{seciliAyLabel} {yil}</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+              🔴 Geçmiş, veri yok &nbsp;|&nbsp; ⬜ Gelecek / bugün &nbsp;|&nbsp; 🟢 Veri var
+            </div>
+          </div>
+          <button onClick={sonrakiAy} disabled={ayIdx === AYLAR.length - 1} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: ayIdx === AYLAR.length - 1 ? '#f8fafc' : '#fff', cursor: ayIdx === AYLAR.length - 1 ? 'not-allowed' : 'pointer', fontSize: '16px', color: ayIdx === AYLAR.length - 1 ? '#cbd5e1' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+        </div>
+
+        {/* Haftanın günleri başlığı */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '6px' }}>
+          {haftaGunleri.map(g => (
+            <div key={g} style={{ textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#94a3b8', padding: '4px' }}>{g}</div>
+          ))}
+        </div>
+
+        {/* Takvim ızgarası */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+          {takvimHucreler.map((gun, i) => {
+            const tarihStr = gun ? `${yil}-${seciliAy}-${gun}` : null
+            const bugunMu = tarihStr === bugunStr
+            const secili = tarihStr === seciliGun
+            const sayi = gun ? takvimVerisi[gun] || 0 : 0
+            return (
+              <div
+                key={i}
+                onClick={() => gun && setSeciliGun(secili ? null : tarihStr)}
+                style={{
+                  aspectRatio: '1', borderRadius: '10px',
+                  background: secili ? '#0d9488' : gunRenk(gun),
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  cursor: gun ? 'pointer' : 'default',
+                  border: bugunMu && !secili ? '2px solid #0d9488' : '2px solid transparent',
+                  transition: 'transform 0.1s',
+                  transform: secili ? 'scale(1.08)' : 'scale(1)',
+                }}
+              >
+                {gun && (
+                  <>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: secili ? '#fff' : gunYaziRenk(gun) }}>{parseInt(gun)}</span>
+                    {sayi > 0 && (
+                      <span style={{ fontSize: '9px', fontWeight: '700', color: secili ? '#ccfbf1' : sayi >= 80 ? '#fff' : '#0f766e', lineHeight: 1 }}>{sayi}</span>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Seçili gün detayı */}
+      {seciliGun && (
+        <div style={{ background: '#fff', borderRadius: '14px', border: '2px solid #0d9488', padding: '20px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b' }}>📅 {formatTarih(seciliGun)}</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                {gunKayitlari?.length > 0
+                  ? `${gunKayitlari.length} kayıt · ${gunKayitlari.reduce((a, k) => a + k.dogru + k.yanlis + k.bos, 0)} soru`
+                  : 'Bu gün kayıt girilmemiş'}
+              </div>
+            </div>
+            <button onClick={() => setSeciliGun(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', width: '28px', height: '28px', cursor: 'pointer', color: '#64748b', fontSize: '16px' }}>×</button>
+          </div>
+
+          {!gunKayitlari || gunKayitlari.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#94a3b8', padding: '24px', fontSize: '13px' }}>Bu gün için kayıt bulunamadı.</div>
+          ) : (
+            <>
+              {/* Özet */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                {(() => {
+                  const topD = gunKayitlari.reduce((a, k) => a + k.dogru, 0)
+                  const topY = gunKayitlari.reduce((a, k) => a + k.yanlis, 0)
+                  const topB = gunKayitlari.reduce((a, k) => a + k.bos, 0)
+                  const topNet = parseFloat((topD - topY / 3).toFixed(2))
+                  return [
+                    { label: 'Toplam Soru', value: topD + topY + topB, renk: '#0d9488', bg: '#f0fdfa' },
+                    { label: 'Doğru', value: topD, renk: '#10b981', bg: '#f0fdf4' },
+                    { label: 'Yanlış', value: topY, renk: '#ef4444', bg: '#fef2f2' },
+                    { label: 'Boş', value: topB, renk: '#94a3b8', bg: '#f8fafc' },
+                    { label: 'Net', value: topNet, renk: '#6366f1', bg: '#eef2ff' },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: s.bg, borderRadius: '10px', padding: '8px 14px', textAlign: 'center', minWidth: '70px' }}>
+                      <div style={{ fontSize: '16px', fontWeight: '800', color: s.renk }}>{s.value}</div>
+                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '1px' }}>{s.label}</div>
+                    </div>
+                  ))
+                })()}
+              </div>
+
+              {/* Kayıt kartları */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {gunKayitlari.map((k, i) => {
+                  const dersRenk = DERS_RENK[k.ders] || '#64748b'
+                  const dersLabel = DERS_LABEL[k.ders] || k.ders
+                  const soruNet = parseFloat((k.dogru - k.yanlis / 3).toFixed(2))
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#f8fafc', borderRadius: '10px', padding: '12px 14px', borderLeft: `4px solid ${dersRenk}` }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: dersRenk }}>{dersLabel}</span>
+                          {k.tip === 'brans' && (
+                            <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>Branş Denemesi</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.konu}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: '12px', color: '#10b981', fontWeight: '600' }}>D:{k.dogru}</span>
+                        <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>Y:{k.yanlis}</span>
+                        <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>B:{k.bos}</span>
+                        <span style={{ fontSize: '13px', fontWeight: '800', color: dersRenk, minWidth: '40px', textAlign: 'right' }}>{soruNet > 0 ? `+${soruNet}` : soruNet}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KonuAnalizi({ dailyStudy }) {
   const konuMap = {}
   dailyStudy.filter(k => k.topic).forEach(k => {
     const anahtar = `${k.lesson}__${k.topic}`
@@ -372,44 +588,10 @@ function KonuAnalizi({ dailyStudy }) {
   DERSLER.forEach(d => { (KONULAR[d.key] || []).forEach(k => tumKonular.push({ ders: d.label, konu: k, dersKey: d.key })) })
   const dokunulmamis = tumKonular.filter(k => !gercekVeriKonular.has(`${k.dersKey}__${k.konu}`))
 
-  const haftaGunleri = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt']
-  const takvimHucreler = []
-  for (let i = 0; i < ilkGunHaftaIci; i++) takvimHucreler.push(null)
-  for (let i = 1; i <= ayGunSayisi; i++) takvimHucreler.push(i)
-
-  function gunRenk(gun) {
-    if (!gun) return 'transparent'
-    const tarihStr = `${yil}-${seciliAy}-${String(gun).padStart(2, '0')}`
-    const gelecek = tarihStr > bugunStr
-    const bugunMu = tarihStr === bugunStr
-    const sayi = takvimVerisi[gun] || 0
-    if (gelecek || bugunMu) {
-      if (sayi === 0) return '#e2e8f0'
-      if (sayi < 30) return '#ccfbf1'
-      if (sayi < 80) return '#5eead4'
-      return '#0d9488'
-    } else {
-      if (sayi === 0) return '#fecaca'
-      if (sayi < 30) return '#ccfbf1'
-      if (sayi < 80) return '#5eead4'
-      return '#0d9488'
-    }
-  }
-
-  function gunYaziRenk(gun) {
-    if (!gun) return '#64748b'
-    const tarihStr = `${yil}-${seciliAy}-${String(gun).padStart(2, '0')}`
-    const gelecek = tarihStr > bugunStr
-    const sayi = takvimVerisi[gun] || 0
-    if (!gelecek && sayi === 0) return '#ef4444'
-    if (sayi >= 80) return '#fff'
-    return '#64748b'
-  }
-
   return (
     <div>
       <MufredatIlerleme dailyStudy={dailyStudy} />
-      {konuListesi.length >= 2 && <EforEfektiflikMatrisi konuListesi={konuListesi} />}
+      {konuListesi.length >= 2 && null}
 
       {(cokCalisAzVeriyor.length > 0 || bosOranYuksek.length > 0) && (
         <div style={{ marginBottom: '24px' }}>
@@ -436,42 +618,6 @@ function KonuAnalizi({ dailyStudy }) {
           </div>
         </div>
       )}
-
-      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <h3 style={{ color: '#1e293b', margin: 0 }}>🗓️ Aylık Çalışma Takvimi</h3>
-          <select value={seciliAy} onChange={e => setSeciliAy(e.target.value)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '14px', color: '#1e293b' }}>
-            {AYLAR.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-          </select>
-        </div>
-        <p style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '16px', marginTop: '4px' }}>
-          🔴 Kırmızı = geçmiş gün, veri girilmemiş &nbsp;|&nbsp; ⬜ Gri = henüz gelmemiş gün
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
-          {haftaGunleri.map(g => <div key={g} style={{ textAlign: 'center', fontSize: '11px', fontWeight: '600', color: '#94a3b8', padding: '4px' }}>{g}</div>)}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-          {takvimHucreler.map((gun, i) => {
-            const tarihStr = gun ? `${yil}-${seciliAy}-${String(gun).padStart(2, '0')}` : null
-            const bugunMu = tarihStr === bugunStr
-            return (
-              <div key={i} style={{
-                aspectRatio: '1', borderRadius: '8px',
-                background: gunRenk(gun),
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                border: bugunMu ? '2px solid #0d9488' : '2px solid transparent',
-              }}>
-                {gun && <>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: gunYaziRenk(gun) }}>{gun}</span>
-                  {takvimVerisi[gun] > 0 && (
-                    <span style={{ fontSize: '10px', color: (takvimVerisi[gun] || 0) >= 80 ? '#fff' : '#0d9488', fontWeight: '600' }}>{takvimVerisi[gun]}</span>
-                  )}
-                </>}
-              </div>
-            )
-          })}
-        </div>
-      </div>
 
       <div style={{ marginBottom: '24px' }}>
         <h3 style={{ color: '#1e293b', marginBottom: '16px' }}>📊 Konu Bazlı Performans</h3>
@@ -535,6 +681,174 @@ function KonuAnalizi({ dailyStudy }) {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── DONUT GRAFİK ────────────────────────────────────────────────────────────
+const DONUT_RENKLER = {
+  paragraf:  '#64748b',
+  turkce:    '#0d9488',
+  matematik: '#6366f1',
+  fen:       '#f59e0b',
+  inkılap:   '#ec4899',
+  ingilizce: '#10b981',
+  din:       '#8b5cf6',
+}
+
+function DesBazliDonut({ dailyStudy, bransDenemeleri }) {
+  const [aralikTip, setAralikTip] = useState('7')
+  const [ozelBaslangic, setOzelBaslangic] = useState('')
+  const [ozelBitis, setOzelBitis] = useState('')
+
+  const bugun = new Date().toISOString().split('T')[0]
+
+  const { baslangic, bitis } = useMemo(() => {
+    if (aralikTip === '7')  return { baslangic: offsetTarih(-6),  bitis: bugun }
+    if (aralikTip === '14') return { baslangic: offsetTarih(-13), bitis: bugun }
+    if (aralikTip === 'ay') return { baslangic: offsetTarih(-29), bitis: bugun }
+    if (aralikTip === 'ozel' && ozelBaslangic && ozelBitis)
+      return { baslangic: ozelBaslangic, bitis: ozelBitis }
+    return { baslangic: offsetTarih(-6), bitis: bugun }
+  }, [aralikTip, ozelBaslangic, ozelBitis])
+
+  const pieData = useMemo(() => {
+    const toplamlar = {}
+
+    // Günlük çalışma
+    dailyStudy
+      .filter(k => k.date >= baslangic && k.date <= bitis)
+      .forEach(k => {
+        const ders = k.lesson
+        toplamlar[ders] = (toplamlar[ders] || 0) + (k.dogru || 0) + (k.yanlis || 0) + (k.bos || 0)
+      })
+
+    // Branş denemeleri
+    bransDenemeleri
+      .filter(b => b.tarih >= baslangic && b.tarih <= bitis)
+      .forEach(b => {
+        const ders = b.brans
+        toplamlar[ders] = (toplamlar[ders] || 0) + (b.dogru || 0) + (b.yanlis || 0) + (b.bos || 0)
+      })
+
+    // DERSLER + paragraf sıralaması, yüzdeye göre azalan
+    const siralama = ['paragraf', 'turkce', 'matematik', 'fen', 'inkılap', 'ingilizce', 'din']
+    return siralama
+      .filter(key => (toplamlar[key] || 0) > 0)
+      .map(key => ({
+        name: { paragraf: 'Paragraf', turkce: 'Türkçe', matematik: 'Matematik', fen: 'Fen', inkılap: 'İnkılap', ingilizce: 'İngilizce', din: 'Din' }[key],
+        value: toplamlar[key],
+        renk: DONUT_RENKLER[key],
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [dailyStudy, bransDenemeleri, baslangic, bitis])
+
+  const toplam = pieData.reduce((a, d) => a + d.value, 0)
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null
+    const d = payload[0].payload
+    return (
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: d.renk }} />
+          <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '13px' }}>{d.name}</span>
+        </div>
+        <div style={{ fontSize: '13px', color: '#64748b' }}>{d.value} soru</div>
+        <div style={{ fontSize: '12px', color: '#94a3b8' }}>%{Math.round(d.value / toplam * 100)}</div>
+      </div>
+    )
+  }
+
+  const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+    if (percent < 0.05) return null
+    const RADIAN = Math.PI / 180
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5
+    const x = cx + radius * Math.cos(-midAngle * RADIAN)
+    const y = cy + radius * Math.sin(-midAngle * RADIAN)
+    return (
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="700">
+        %{Math.round(percent * 100)}
+      </text>
+    )
+  }
+
+  return (
+    <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px', marginBottom: '16px' }}>
+      {/* Başlık + tarih filtresi */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+        <div>
+          <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>🍩 Ders Bazlı Toplam Soru</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{baslangic} → {bitis}</div>
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {[{ key: '7', label: 'Son 7 Gün' }, { key: '14', label: 'Son 14 Gün' }, { key: 'ay', label: 'Son 30 Gün' }, { key: 'ozel', label: 'Özel' }].map(a => (
+            <button key={a.key} onClick={() => setAralikTip(a.key)} style={{
+              padding: '5px 12px', border: 'none', borderRadius: '20px', cursor: 'pointer',
+              fontSize: '12px', fontWeight: aralikTip === a.key ? '700' : '400',
+              background: aralikTip === a.key ? '#1e293b' : '#f1f5f9',
+              color: aralikTip === a.key ? '#fff' : '#64748b', fontFamily: 'inherit',
+            }}>{a.label}</button>
+          ))}
+          {aralikTip === 'ozel' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+              <input type="date" value={ozelBaslangic} onChange={e => setOzelBaslangic(e.target.value)}
+                style={{ padding: '4px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+              <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>
+              <input type="date" value={ozelBitis} onChange={e => setOzelBitis(e.target.value)}
+                style={{ padding: '4px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {pieData.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px', fontSize: '14px' }}>Bu aralıkta kayıt yok.</div>
+      ) : (
+        <div style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Donut */}
+          <div style={{ flex: '0 0 260px' }}>
+            <ResponsiveContainer width={260} height={260}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%" cy="50%"
+                  innerRadius={70} outerRadius={110}
+                  dataKey="value"
+                  labelLine={false}
+                  isAnimationActive={false}
+                  label={<CustomLabel />}
+                >
+                  {pieData.map((entry, i) => (
+                    <Cell key={i} fill={entry.renk} stroke="#fff" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Legend + istatistik */}
+          <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '4px' }}>
+              TOPLAM: {toplam} SORU
+            </div>
+            {pieData.map((d, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: d.renk, flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: '13px', color: '#1e293b', fontWeight: '500' }}>{d.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '80px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round(d.value / toplam * 100)}%`, height: '100%', background: d.renk, borderRadius: '3px' }} />
+                  </div>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: d.renk, minWidth: '28px', textAlign: 'right' }}>%{Math.round(d.value / toplam * 100)}</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', minWidth: '50px', textAlign: 'right' }}>{d.value} soru</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -693,96 +1007,90 @@ function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
         ))}
       </div>
 
-      {/* Filtre paneli */}
-      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px 20px', marginBottom: '16px' }}>
-        <div style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>DERS</div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {DERS_FILTRELER.map(f => (
-              <button key={f.key} onClick={() => setDersFiltire(f.key)} style={{
-                padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
-                fontSize: '12px', fontWeight: dersFiltire === f.key ? '700' : '400',
-                background: dersFiltire === f.key ? f.renk : '#f1f5f9',
-                color: dersFiltire === f.key ? '#fff' : '#64748b',
-                fontFamily: 'inherit', transition: 'all 0.12s',
-              }}>{f.label}</button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>TARİH ARALIĞI</div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {[{ key: '7', label: 'Son 7 Gün' }, { key: '14', label: 'Son 14 Gün' }, { key: 'ay', label: 'Son 30 Gün' }, { key: 'ozel', label: 'Özel Aralık' }].map(a => (
-              <button key={a.key} onClick={() => setAralikTip(a.key)} style={{
-                padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
-                fontSize: '12px', fontWeight: aralikTip === a.key ? '700' : '400',
-                background: aralikTip === a.key ? '#1e293b' : '#f1f5f9',
-                color: aralikTip === a.key ? '#fff' : '#64748b',
-                fontFamily: 'inherit',
-              }}>{a.label}</button>
-            ))}
-            {aralikTip === 'ozel' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '4px', flexWrap: 'wrap' }}>
-                <input type="date" value={ozelBaslangic} onChange={e => setOzelBaslangic(e.target.value)}
-                  style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
-                <span style={{ color: '#94a3b8' }}>—</span>
-                <input type="date" value={ozelBitis} onChange={e => setOzelBitis(e.target.value)}
-                  style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Grafik */}
-      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>
-              {dersFiltire === 'tumu' ? 'Tüm Dersler (Ders Bazlı)' : `${aktifFiltre?.label} — Soru Sayısı`}
-            </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{baslangic} → {bitis} · {tumGunler.length} gün</div>
-          </div>
-          {dersFiltire === 'tumu' && aktifDersler.length > 0 && (
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {aktifDersler.map(f => (
-                <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <div style={{ width: '10px', height: '3px', borderRadius: '2px', background: f.renk }} />
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>{f.label}</span>
-                </div>
+      {/* Filtre + Grafik — tek kart */}
+      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px', marginBottom: '16px' }}>
+        {/* Filtreler */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>DERS</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {DERS_FILTRELER.map(f => (
+                <button key={f.key} onClick={() => setDersFiltire(f.key)} style={{
+                  padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
+                  fontSize: '12px', fontWeight: dersFiltire === f.key ? '700' : '400',
+                  background: dersFiltire === f.key ? f.renk : '#f1f5f9',
+                  color: dersFiltire === f.key ? '#fff' : '#64748b',
+                  fontFamily: 'inherit', transition: 'all 0.12s',
+                }}>{f.label}</button>
               ))}
             </div>
-          )}
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>TARİH ARALIĞI</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {[{ key: '7', label: 'Son 7 Gün' }, { key: '14', label: 'Son 14 Gün' }, { key: 'ay', label: 'Son 30 Gün' }, { key: 'ozel', label: 'Özel Aralık' }].map(a => (
+                <button key={a.key} onClick={() => setAralikTip(a.key)} style={{
+                  padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
+                  fontSize: '12px', fontWeight: aralikTip === a.key ? '700' : '400',
+                  background: aralikTip === a.key ? '#1e293b' : '#f1f5f9',
+                  color: aralikTip === a.key ? '#fff' : '#64748b',
+                  fontFamily: 'inherit',
+                }}>{a.label}</button>
+              ))}
+              {aralikTip === 'ozel' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '4px', flexWrap: 'wrap' }}>
+                  <input type="date" value={ozelBaslangic} onChange={e => setOzelBaslangic(e.target.value)}
+                    style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
+                  <span style={{ color: '#94a3b8' }}>—</span>
+                  <input type="date" value={ozelBitis} onChange={e => setOzelBitis(e.target.value)}
+                    style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {graficVeri.every(g => (dersFiltire === 'tumu' ? g.toplam : g[dersFiltire] || 0) === 0) ? (
-          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '48px', fontSize: '14px' }}>
-            Bu aralıkta kayıt bulunamadı.
+        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>
+                {dersFiltire === 'tumu' ? 'Tüm Dersler — Toplam Soru' : `${aktifFiltre?.label} — Soru Sayısı`}
+              </div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{baslangic} → {bitis} · {tumGunler.length} gün</div>
+            </div>
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={graficVeri} margin={{ top: 8, right: 16, bottom: 8, left: -10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis
-                dataKey="tarihKisa"
-                tick={{ fontSize: 11, fill: '#94a3b8' }}
-                interval={Math.max(0, Math.floor(tumGunler.length / 8) - 1)}
-              />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
 
-              {dersFiltire === 'tumu'
-                ? <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                : <Line type="monotone" dataKey={dersFiltire}
-                    stroke={aktifFiltre?.renk || '#0d9488'} strokeWidth={2.5}
-                    dot={{ r: 4, fill: aktifFiltre?.renk || '#0d9488', strokeWidth: 0 }}
-                    activeDot={{ r: 6 }} />
-              }
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+          {graficVeri.every(g => (dersFiltire === 'tumu' ? g.toplam : g[dersFiltire] || 0) === 0) ? (
+            <div style={{ textAlign: 'center', color: '#94a3b8', padding: '48px', fontSize: '14px' }}>
+              Bu aralıkta kayıt bulunamadı.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={graficVeri} margin={{ top: 8, right: 16, bottom: 8, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="tarihKisa"
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  interval={Math.max(0, Math.floor(tumGunler.length / 8) - 1)}
+                />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                {dersFiltire === 'tumu'
+                  ? <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
+                      dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                  : <Line type="monotone" dataKey={dersFiltire}
+                      stroke={aktifFiltre?.renk || '#0d9488'} strokeWidth={2.5}
+                      dot={{ r: 4, fill: aktifFiltre?.renk || '#0d9488', strokeWidth: 0 }}
+                      activeDot={{ r: 6 }} />
+                }
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
+
+      {/* Donut Grafik */}
+      <DesBazliDonut dailyStudy={dailyStudy} bransDenemeleri={bransDenemeleri} />
     </div>
   )
 }
@@ -792,7 +1100,7 @@ export default function StudentDetail({ studentId, onBack }) {
   const [results, setResults] = useState([])
   const [dailyStudy, setDailyStudy] = useState([])
   const [bransDenemeleri, setBransDenemeleri] = useState([])
-  const [tab, setTab] = useState('denemeler')
+  const [tab, setTab] = useState('gunluk')
   const [editResult, setEditResult] = useState(null)
   const [editData, setEditData] = useState({})
   const [editSuccess, setEditSuccess] = useState('')
@@ -852,12 +1160,12 @@ export default function StudentDetail({ studentId, onBack }) {
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
+          { key: 'gunluk', label: '📅 Günlük Çalışma' },
           { key: 'denemeler', label: '📝 Denemeler' },
           { key: 'grafik', label: '📈 Gelişim Grafiği' },
           { key: 'brans_grafik', label: '🎯 Branş Grafikleri' },
           { key: 'soru_analizi', label: '📊 Soru Analizi' },
           { key: 'konu', label: '🔍 Konu Analizi' },
-          { key: 'gunluk', label: '📅 Günlük Çalışma' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: '10px 20px', border: 'none', borderRadius: '10px', cursor: 'pointer', background: tab === t.key ? '#0d9488' : '#f1f5f9', color: tab === t.key ? '#fff' : '#64748b', fontWeight: tab === t.key ? '600' : '400', fontSize: '14px' }}>{t.label}</button>
         ))}
@@ -1021,39 +1329,7 @@ export default function StudentDetail({ studentId, onBack }) {
 
       {/* GÜNLÜK TAB */}
       {tab === 'gunluk' && (
-        <div>
-          <h3 style={{ color: '#1e293b', marginBottom: '16px' }}>Günlük Çalışma Geçmişi</h3>
-          {dailyStudy.length === 0 ? <p style={{ color: '#94a3b8' }}>Henüz günlük çalışma kaydı yok</p> : (
-            <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Tarih</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Ders</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>Konu</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#10b981', fontWeight: '600', fontSize: '13px' }}>D</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#ef4444', fontWeight: '600', fontSize: '13px' }}>Y</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>B</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#0d9488', fontWeight: '600', fontSize: '13px' }}>Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyStudy.map(d => (
-                    <tr key={d.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '12px 16px', color: '#1e293b' }}>{d.date}</td>
-                      <td style={{ padding: '12px 16px', color: '#64748b', fontWeight: '500' }}>{d.lesson}</td>
-                      <td style={{ padding: '12px 16px', color: '#94a3b8' }}>{d.topic || '-'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#10b981' }}>{d.dogru}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#ef4444' }}>{d.yanlis}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#94a3b8' }}>{d.bos}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '700', color: '#0d9488' }}>{net(d.dogru, d.yanlis)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <GunlukTakvim dailyStudy={dailyStudy} bransDenemeleri={bransDenemeleri} />
       )}
     </div>
   )
