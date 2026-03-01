@@ -772,14 +772,8 @@ function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
               <Tooltip content={<CustomTooltip />} />
 
               {dersFiltire === 'tumu'
-                ? aktifDersler.length > 0
-                  ? aktifDersler.map(f => (
-                    <Line key={f.key} type="monotone" dataKey={f.key}
-                      stroke={f.renk} strokeWidth={2} dot={false}
-                      activeDot={{ r: 5, strokeWidth: 0 }} name={f.label} />
-                  ))
-                  : <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                ? <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
                 : <Line type="monotone" dataKey={dersFiltire}
                     stroke={aktifFiltre?.renk || '#0d9488'} strokeWidth={2.5}
                     dot={{ r: 4, fill: aktifFiltre?.renk || '#0d9488', strokeWidth: 0 }}
