@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, buton } from '../styles'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ZAxis, ReferenceLine } from 'recharts'
@@ -542,6 +542,257 @@ function KonuAnalizi({ dailyStudy }) {
   )
 }
 
+const DERS_FILTRELER = [
+  { key: 'tumu',      label: 'Tümü',      renk: '#1e293b' },
+  { key: 'paragraf',  label: 'Paragraf',  renk: '#64748b' },
+  { key: 'turkce',    label: 'Türkçe',    renk: '#0d9488' },
+  { key: 'matematik', label: 'Matematik', renk: '#6366f1' },
+  { key: 'fen',       label: 'Fen',       renk: '#f59e0b' },
+  { key: 'inkılap',   label: 'İnkılap',   renk: '#ec4899' },
+  { key: 'ingilizce', label: 'İngilizce', renk: '#10b981' },
+  { key: 'din',       label: 'Din',       renk: '#8b5cf6' },
+]
+
+function gunlerArasi(baslangic, bitis) {
+  const gunler = []
+  const cur = new Date(baslangic)
+  const son = new Date(bitis)
+  while (cur <= son) {
+    gunler.push(cur.toISOString().split('T')[0])
+    cur.setDate(cur.getDate() + 1)
+  }
+  return gunler
+}
+
+function offsetTarih(gunFark) {
+  const d = new Date()
+  d.setDate(d.getDate() + gunFark)
+  return d.toISOString().split('T')[0]
+}
+
+function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
+  const [dersFiltire, setDersFiltire] = useState('tumu')
+  const [aralikTip, setAralikTip] = useState('7')
+  const [ozelBaslangic, setOzelBaslangic] = useState('')
+  const [ozelBitis, setOzelBitis] = useState('')
+
+  const bugun = new Date().toISOString().split('T')[0]
+
+  const { baslangic, bitis } = useMemo(() => {
+    if (aralikTip === '7')  return { baslangic: offsetTarih(-6),  bitis: bugun }
+    if (aralikTip === '14') return { baslangic: offsetTarih(-13), bitis: bugun }
+    if (aralikTip === 'ay') return { baslangic: offsetTarih(-29), bitis: bugun }
+    if (aralikTip === 'ozel' && ozelBaslangic && ozelBitis)
+      return { baslangic: ozelBaslangic, bitis: ozelBitis }
+    return { baslangic: offsetTarih(-6), bitis: bugun }
+  }, [aralikTip, ozelBaslangic, ozelBitis])
+
+  const tumGunler = useMemo(() => gunlerArasi(baslangic, bitis), [baslangic, bitis])
+
+  // Tüm kaynakları tek listeye birleştir
+  const tumSatirlar = useMemo(() => {
+    const gunluk = dailyStudy.map(k => ({
+      tarih: k.date,
+      ders: k.lesson,
+      soru: (k.dogru || 0) + (k.yanlis || 0) + (k.bos || 0),
+    }))
+    const brans = bransDenemeleri.map(b => ({
+      tarih: b.tarih,
+      ders: b.brans,   // 'turkce', 'matematik' vb — paragraf olmaz
+      soru: (b.dogru || 0) + (b.yanlis || 0) + (b.bos || 0),
+    }))
+    return [...gunluk, ...brans]
+  }, [dailyStudy, bransDenemeleri])
+
+  // Her gün için ders bazlı toplamlar
+  const graficVeri = useMemo(() => {
+    return tumGunler.map(gun => {
+      const gunSatirlari = tumSatirlar.filter(k => k.tarih === gun)
+      const row = { tarih: gun, tarihKisa: gun.slice(5), toplam: 0 }
+      DERS_FILTRELER.filter(f => f.key !== 'tumu').forEach(f => { row[f.key] = 0 })
+      gunSatirlari.forEach(k => {
+        row.toplam += k.soru
+        if (row[k.ders] !== undefined) row[k.ders] += k.soru
+      })
+      return row
+    })
+  }, [tumGunler, tumSatirlar])
+
+  // Filtreye göre aktif ders listesi (tümü seçiliyse çoklu çizgi)
+  const aktifDersler = useMemo(() => {
+    if (dersFiltire !== 'tumu') return []
+    return DERS_FILTRELER.filter(f =>
+      f.key !== 'tumu' && graficVeri.some(g => g[f.key] > 0)
+    )
+  }, [dersFiltire, graficVeri])
+
+  // Özet istatistikler
+  const ozet = useMemo(() => {
+    const filtreKey = dersFiltire === 'tumu' ? 'toplam' : dersFiltire
+    const degerler = graficVeri.map(g => g[filtreKey] || 0)
+    const aktifGunler = degerler.filter(v => v > 0)
+    const toplamSoru = degerler.reduce((a, b) => a + b, 0)
+    const enCok = aktifGunler.length > 0 ? Math.max(...aktifGunler) : 0
+    const ort = aktifGunler.length > 0 ? Math.round(toplamSoru / aktifGunler.length) : 0
+    // Seri: bugünden geriye kaç gün arka arkaya aktif
+    let seri = 0
+    for (let i = graficVeri.length - 1; i >= 0; i--) {
+      if ((graficVeri[i][filtreKey] || 0) > 0) seri++
+      else break
+    }
+    return { toplamSoru, aktifGun: aktifGunler.length, enCok, ort, seri }
+  }, [graficVeri, dersFiltire])
+
+  const aktifFiltre = DERS_FILTRELER.find(f => f.key === dersFiltire)
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null
+    const satirlar = payload.filter(p => (p.value || 0) > 0)
+    if (!satirlar.length) return null
+    return (
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', minWidth: '150px' }}>
+        <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '8px', fontSize: '13px' }}>{label}</div>
+        {satirlar.map(p => (
+          <div key={p.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontSize: '12px', marginBottom: '3px' }}>
+            <span style={{ color: p.color, fontWeight: '600' }}>
+              {DERS_FILTRELER.find(f => f.key === p.dataKey)?.label || 'Toplam'}
+            </span>
+            <span style={{ fontWeight: '700', color: '#1e293b' }}>{p.value} soru</span>
+          </div>
+        ))}
+        {dersFiltire === 'tumu' && satirlar.length > 1 && (
+          <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+            <span style={{ color: '#64748b' }}>Toplam</span>
+            <span style={{ fontWeight: '800', color: '#0d9488' }}>{satirlar.reduce((a, p) => a + p.value, 0)} soru</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: '20px' }}>
+        <h3 style={{ color: '#1e293b', margin: '0 0 4px' }}>📊 Günlük Soru Çözüm Analizi</h3>
+        <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>Günlük çalışma + branş denemeleri birleşik — soru sayısı trendi</p>
+      </div>
+
+      {/* Özet kartlar */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+        {[
+          { label: 'Toplam Soru', value: ozet.toplamSoru, renk: '#0d9488', bg: '#f0fdfa' },
+          { label: 'Aktif Gün',   value: ozet.aktifGun,   renk: '#6366f1', bg: '#eef2ff' },
+          { label: 'Günlük Ort.', value: ozet.ort,        renk: '#f59e0b', bg: '#fffbeb' },
+          { label: 'En Çok (1 G)',value: ozet.enCok,      renk: '#10b981', bg: '#f0fdf4' },
+          { label: '🔥 Seri',     value: `${ozet.seri}g`, renk: '#ef4444', bg: '#fef2f2' },
+        ].map(k => (
+          <div key={k.label} style={{ background: k.bg, borderRadius: '12px', padding: '12px', textAlign: 'center' }}>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: k.renk }}>{k.value}</div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtre paneli */}
+      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '16px 20px', marginBottom: '16px' }}>
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>DERS</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {DERS_FILTRELER.map(f => (
+              <button key={f.key} onClick={() => setDersFiltire(f.key)} style={{
+                padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
+                fontSize: '12px', fontWeight: dersFiltire === f.key ? '700' : '400',
+                background: dersFiltire === f.key ? f.renk : '#f1f5f9',
+                color: dersFiltire === f.key ? '#fff' : '#64748b',
+                fontFamily: 'inherit', transition: 'all 0.12s',
+              }}>{f.label}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.5px', marginBottom: '8px' }}>TARİH ARALIĞI</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {[{ key: '7', label: 'Son 7 Gün' }, { key: '14', label: 'Son 14 Gün' }, { key: 'ay', label: 'Son 30 Gün' }, { key: 'ozel', label: 'Özel Aralık' }].map(a => (
+              <button key={a.key} onClick={() => setAralikTip(a.key)} style={{
+                padding: '6px 14px', border: 'none', borderRadius: '20px', cursor: 'pointer',
+                fontSize: '12px', fontWeight: aralikTip === a.key ? '700' : '400',
+                background: aralikTip === a.key ? '#1e293b' : '#f1f5f9',
+                color: aralikTip === a.key ? '#fff' : '#64748b',
+                fontFamily: 'inherit',
+              }}>{a.label}</button>
+            ))}
+            {aralikTip === 'ozel' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '4px', flexWrap: 'wrap' }}>
+                <input type="date" value={ozelBaslangic} onChange={e => setOzelBaslangic(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
+                <span style={{ color: '#94a3b8' }}>—</span>
+                <input type="date" value={ozelBitis} onChange={e => setOzelBitis(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Grafik */}
+      <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>
+              {dersFiltire === 'tumu' ? 'Tüm Dersler (Ders Bazlı)' : `${aktifFiltre?.label} — Soru Sayısı`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{baslangic} → {bitis} · {tumGunler.length} gün</div>
+          </div>
+          {dersFiltire === 'tumu' && aktifDersler.length > 0 && (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {aktifDersler.map(f => (
+                <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ width: '10px', height: '3px', borderRadius: '2px', background: f.renk }} />
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>{f.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {graficVeri.every(g => (dersFiltire === 'tumu' ? g.toplam : g[dersFiltire] || 0) === 0) ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '48px', fontSize: '14px' }}>
+            Bu aralıkta kayıt bulunamadı.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={graficVeri} margin={{ top: 8, right: 16, bottom: 8, left: -10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis
+                dataKey="tarihKisa"
+                tick={{ fontSize: 11, fill: '#94a3b8' }}
+                interval={Math.max(0, Math.floor(tumGunler.length / 8) - 1)}
+              />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+
+              {dersFiltire === 'tumu'
+                ? aktifDersler.length > 0
+                  ? aktifDersler.map(f => (
+                    <Line key={f.key} type="monotone" dataKey={f.key}
+                      stroke={f.renk} strokeWidth={2} dot={false}
+                      activeDot={{ r: 5, strokeWidth: 0 }} name={f.label} />
+                  ))
+                  : <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
+                      dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                : <Line type="monotone" dataKey={dersFiltire}
+                    stroke={aktifFiltre?.renk || '#0d9488'} strokeWidth={2.5}
+                    dot={{ r: 4, fill: aktifFiltre?.renk || '#0d9488', strokeWidth: 0 }}
+                    activeDot={{ r: 6 }} />
+              }
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function StudentDetail({ studentId, onBack }) {
   const [student, setStudent] = useState(null)
   const [results, setResults] = useState([])
@@ -610,6 +861,7 @@ export default function StudentDetail({ studentId, onBack }) {
           { key: 'denemeler', label: '📝 Denemeler' },
           { key: 'grafik', label: '📈 Gelişim Grafiği' },
           { key: 'brans_grafik', label: '🎯 Branş Grafikleri' },
+          { key: 'soru_analizi', label: '📊 Soru Analizi' },
           { key: 'konu', label: '🔍 Konu Analizi' },
           { key: 'gunluk', label: '📅 Günlük Çalışma' },
         ].map(t => (
@@ -763,6 +1015,11 @@ export default function StudentDetail({ studentId, onBack }) {
           </div>
           <BransDenemeGrafik bransDenemeleri={bransDenemeleri} />
         </div>
+      )}
+
+      {/* SORU ANALİZİ TAB */}
+      {tab === 'soru_analizi' && (
+        <GunlukSoruAnalizi dailyStudy={dailyStudy} bransDenemeleri={bransDenemeleri} />
       )}
 
       {/* KONU TAB */}
