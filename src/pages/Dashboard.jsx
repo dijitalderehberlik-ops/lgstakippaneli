@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import Students from './Students'
 import ExamEntry from './ExamEntry'
 import StudentDetail from './StudentDetail'
+import AdminSettings from './AdminSettings'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe', maxSoru: 20 },
@@ -26,6 +27,12 @@ export default function Dashboard({ session }) {
 
   async function handleLogout() { await supabase.auth.signOut() }
 
+  const menuItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { key: 'students', label: 'Öğrenciler', icon: '👥' },
+    { key: 'exams', label: 'Deneme Gir', icon: '📝' },
+  ]
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: font.family, background: renk.gray50 }}>
       {/* Sol menü */}
@@ -37,11 +44,8 @@ export default function Dashboard({ session }) {
             <div style={{ fontSize: font.size.sm, color: renk.gray400 }}>Admin Panel</div>
           </div>
         </div>
-        {[
-          { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-          { key: 'students', label: 'Öğrenciler', icon: '👥' },
-          { key: 'exams', label: 'Deneme Gir', icon: '📝' },
-        ].map(m => (
+
+        {menuItems.map(m => (
           <button key={m.key} onClick={() => { setPage(m.key); setSelectedStudentId(null) }} style={{
             display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: 'none', borderRadius: '10px', cursor: 'pointer',
             background: page === m.key && !selectedStudentId ? renk.primaryLight : 'transparent',
@@ -52,7 +56,20 @@ export default function Dashboard({ session }) {
             <span>{m.icon}</span> {m.label}
           </button>
         ))}
+
         <div style={{ flex: 1 }} />
+
+        {/* Yönetici Ayarları */}
+        <button onClick={() => { setPage('admin'); setSelectedStudentId(null) }} style={{
+          display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: 'none', borderRadius: '10px', cursor: 'pointer',
+          background: page === 'admin' ? '#f1f5f9' : 'transparent',
+          color: page === 'admin' ? '#1e293b' : renk.gray600,
+          fontWeight: page === 'admin' ? '600' : '400',
+          fontSize: font.size.md, textAlign: 'left', fontFamily: font.family,
+        }}>
+          <span>⚙️</span> Yönetici Ayarları
+        </button>
+
         <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: renk.redLight, border: 'none', borderRadius: '10px', cursor: 'pointer', color: renk.red, fontSize: font.size.md, fontFamily: font.family }}>
           🚪 Çıkış Yap
         </button>
@@ -65,8 +82,16 @@ export default function Dashboard({ session }) {
         ) : (
           <>
             {page === 'dashboard' && <DashboardHome onStudentClick={setSelectedStudentId} />}
-            {page === 'students' && <Students onStudentClick={setSelectedStudentId} />}
+            {page === 'students' && (
+              <Students
+                onStudentClick={setSelectedStudentId}
+                onNavigate={(p) => { setPage(p); setSelectedStudentId(null) }}
+              />
+            )}
             {page === 'exams' && <ExamEntry />}
+            {page === 'admin' && (
+              <AdminSettings onBack={() => setPage('students')} />
+            )}
           </>
         )}
       </div>
