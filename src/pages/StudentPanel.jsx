@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { renk, font, buton } from '../styles'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import BransDeneme from './BransDeneme'
 
 const DERSLER = [
   { key: 'turkce', label: 'Türkçe' },
@@ -34,6 +35,7 @@ const GUNLUK_DERSLER_TANIM = [
 const MENU = [
   { key: 'gunluk', label: 'Çalışma', icon: '📅' },
   { key: 'denemeler', label: 'Denemeler', icon: '📝' },
+  { key: 'brans', label: 'Branş', icon: '🎯' },
   { key: 'gelisim', label: 'Gelişim', icon: '📈' },
   { key: 'karsilastirma', label: 'Sınıf', icon: '📊' },
 ]
@@ -133,6 +135,7 @@ function PageContent({ page, userId, studentName, isMobile }) {
   if (page === 'karsilastirma') return <SinifKarsilastirma userId={userId} isMobile={isMobile} />
   if (page === 'gunluk') return <GunlukCalisma userId={userId} isMobile={isMobile} />
   if (page === 'gelisim') return <Gelisim userId={userId} studentName={studentName} isMobile={isMobile} />
+  if (page === 'brans') return <BransDeneme userId={userId} isMobile={isMobile} />
   return null
 }
 
@@ -152,14 +155,12 @@ function BireyselDenemeForm({ userId, onClose, onSaved, editData }) {
     setSaving(true)
 
     if (editData) {
-      // Güncelleme: exam adı/tarihi güncelle, result güncelle
       const { error: e1 } = await supabase.from('exams').update({ name: form.ad, date: form.tarih }).eq('id', editData.examId)
       if (e1) { setError('Güncellenemedi: ' + e1.message); setSaving(false); return }
       const row = DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: parseInt(form[`${d.key}_d`]) || 0, [`${d.key}_y`]: parseInt(form[`${d.key}_y`]) || 0, [`${d.key}_b`]: 0 }), {})
       const { error: e2 } = await supabase.from('exam_results').update(row).eq('id', editData.resultId)
       if (e2) { setError('Güncellenemedi: ' + e2.message); setSaving(false); return }
     } else {
-      // Yeni kayıt
       const { data: examData, error: e1 } = await supabase.from('exams').insert({ name: form.ad, date: form.tarih, type: 'individual' }).select().single()
       if (e1) { setError('Deneme oluşturulamadı: ' + e1.message); setSaving(false); return }
       const row = { student_id: userId, exam_id: examData.id, ...DERSLER.reduce((a, d) => ({ ...a, [`${d.key}_d`]: parseInt(form[`${d.key}_d`]) || 0, [`${d.key}_y`]: parseInt(form[`${d.key}_y`]) || 0, [`${d.key}_b`]: 0 }), {}) }
@@ -243,7 +244,7 @@ function Denemelerim({ userId, isMobile }) {
   const [formAcik, setFormAcik] = useState(false)
   const [editData, setEditData] = useState(null)
   const [silOnay, setSilOnay] = useState(null)
-  const [filtre, setFiltre] = useState('tumu') // tumu | ortak | bireysel
+  const [filtre, setFiltre] = useState('tumu')
 
   useEffect(() => { if (userId) yukle() }, [userId])
 
@@ -254,7 +255,6 @@ function Denemelerim({ userId, isMobile }) {
   }
 
   async function handleSil(r) {
-    // Bireysel denemede exam kaydını da sil
     await supabase.from('exam_results').delete().eq('id', r.id)
     if (r.exams?.type === 'individual') {
       await supabase.from('exams').delete().eq('id', r.exam_id)
@@ -298,7 +298,6 @@ function Denemelerim({ userId, isMobile }) {
         </button>
       </div>
 
-      {/* Filtre */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         {[{ key: 'tumu', label: 'Tümü' }, { key: 'ortak', label: '👥 Ortak' }, { key: 'bireysel', label: '👤 Bireysel' }].map(f => (
           <button key={f.key} onClick={() => setFiltre(f.key)} style={{
@@ -723,7 +722,7 @@ function Gelisim({ userId, studentName, isMobile }) {
   const [results, setResults] = useState([])
   const [dailyStudy, setDailyStudy] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filtre, setFiltre] = useState('tumu') // tumu | ortak | bireysel
+  const [filtre, setFiltre] = useState('tumu')
 
   useEffect(() => {
     if (!userId) return
@@ -739,7 +738,6 @@ function Gelisim({ userId, studentName, isMobile }) {
 
   if (loading) return <p style={{ color: renk.gray400 }}>Yükleniyor...</p>
 
-  // Filtreye göre denemeler
   const filtrelenmis = [...results]
     .filter(r => filtre === 'tumu' ? true : filtre === 'ortak' ? r.exams?.type === 'common' : r.exams?.type === 'individual')
     .sort((a, b) => new Date(a.exams?.date) - new Date(b.exams?.date))

@@ -21,18 +21,14 @@ const KONULAR = {
   din: ['Kader inancı','Zekat ve sadaka','Din ve hayat','Hz. Muhammedin Örnekliği','Kuranı Kerim ve Özellikleri'],
 }
 
-const AYLAR = [
-  { value: '09', label: 'Eylül' },
-  { value: '10', label: 'Ekim' },
-  { value: '11', label: 'Kasım' },
-  { value: '12', label: 'Aralık' },
-  { value: '01', label: 'Ocak' },
-  { value: '02', label: 'Şubat' },
-  { value: '03', label: 'Mart' },
-  { value: '04', label: 'Nisan' },
-  { value: '05', label: 'Mayıs' },
-  { value: '06', label: 'Haziran' },
-]
+const BRANS_RENKLER = {
+  turkce: '#0d9488',
+  matematik: '#6366f1',
+  fen: '#f59e0b',
+  inkılap: '#ec4899',
+  ingilizce: '#10b981',
+  din: '#8b5cf6',
+}
 
 function net(d, y) { return parseFloat((d - y / 3).toFixed(2)) }
 function toplamNet(result) {
@@ -51,6 +47,129 @@ function konuSkoru(dogru, yanlis, bos) {
   return Math.round(soruAgirligi * basariAgirligi * 100)
 }
 
+// ─── BRANŞ DENEMESİ GRAFİKLERİ ───────────────────────────────────────────────
+function BransDenemeGrafik({ bransDenemeleri }) {
+  const gruplu = DERSLER.map(d => {
+    const liste = bransDenemeleri
+      .filter(b => b.brans === d.key)
+      .sort((a, b) => new Date(a.tarih) - new Date(b.tarih))
+    return { ...d, liste }
+  }).filter(d => d.liste.length > 0)
+
+  if (gruplu.length === 0) {
+    return (
+      <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+        Bu öğrenciye ait branş denemesi kaydı yok.
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px' }}>
+        {gruplu.map(d => {
+          const trendData = d.liste.map((b, i) => ({
+            name: b.ad.length > 18 ? b.ad.slice(0, 18) + '…' : b.ad,
+            fullName: b.ad,
+            net: net(b.dogru, b.yanlis),
+            tarih: b.tarih,
+            dogru: b.dogru,
+            yanlis: b.yanlis,
+            bos: b.bos,
+            sira: i + 1,
+          }))
+
+          const netler = trendData.map(t => t.net)
+          const enYuksek = Math.max(...netler)
+          const enDusuk = Math.min(...netler)
+          const ortalama = parseFloat((netler.reduce((a, b) => a + b, 0) / netler.length).toFixed(2))
+          const ilk = netler[0]
+          const son = netler[netler.length - 1]
+          const fark = parseFloat((son - ilk).toFixed(2))
+          const renk = BRANS_RENKLER[d.key] || '#0d9488'
+          const maxSoru = { turkce: 20, matematik: 20, fen: 20, inkılap: 10, ingilizce: 10, din: 10 }[d.key] || 20
+
+          const CustomTooltip = ({ active, payload }) => {
+            if (!active || !payload?.length) return null
+            const p = payload[0].payload
+            return (
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: '180px' }}>
+                <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '6px', fontSize: '13px' }}>{p.fullName}</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>{p.tarih}</div>
+                <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
+                  <span style={{ color: '#10b981' }}>D: {p.dogru}</span>
+                  <span style={{ color: '#ef4444' }}>Y: {p.yanlis}</span>
+                  <span style={{ color: '#94a3b8' }}>B: {p.bos}</span>
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '16px', fontWeight: '800', color: renk }}>
+                  Net: {p.net}
+                  <span style={{ fontSize: '11px', fontWeight: '400', color: '#94a3b8', marginLeft: '4px' }}>/ {maxSoru}</span>
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <div key={d.key} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              {/* Başlık */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: renk }} />
+                  <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '15px' }}>{d.label}</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>{d.liste.length} deneme</span>
+                </div>
+                <div style={{ display: 'flex', gap: '2px', alignItems: 'center', background: fark >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '8px', padding: '4px 10px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: fark >= 0 ? '#10b981' : '#ef4444' }}>
+                    {fark >= 0 ? '↑ +' : '↓ '}{fark}
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '2px' }}>gelişim</span>
+                </div>
+              </div>
+
+              {/* Grafik */}
+              <div style={{ padding: '16px 20px 8px' }}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={trendData} margin={{ top: 8, right: 12, bottom: 8, left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="sira" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => `#${v}`} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} domain={[0, maxSoru]} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line
+                      type="monotone"
+                      dataKey="net"
+                      stroke={renk}
+                      strokeWidth={2.5}
+                      dot={{ fill: renk, r: 5, strokeWidth: 2, stroke: '#fff' }}
+                      activeDot={{ r: 7 }}
+                      name="Net"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Özet istatistikler */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid #f1f5f9' }}>
+                {[
+                  { label: 'İlk', value: ilk, color: '#64748b' },
+                  { label: 'Son', value: son, color: renk },
+                  { label: 'En İyi', value: enYuksek, color: '#10b981' },
+                  { label: 'Ortalama', value: ortalama, color: '#f59e0b' },
+                ].map(s => (
+                  <div key={s.label} style={{ padding: '10px 8px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>{s.label}</div>
+                    <div style={{ fontSize: '15px', fontWeight: '800', color: s.color }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── EFOR EFEKTİFLİK MATRİSİ ─────────────────────────────────────────────────
 function EforEfektiflikMatrisi({ konuListesi }) {
   const ortalamaX = konuListesi.reduce((a, k) => a + k.toplam, 0) / konuListesi.length
   const ortalamaY = konuListesi.reduce((a, k) => a + k.yuzde, 0) / konuListesi.length
@@ -193,6 +312,14 @@ function MufredatIlerleme({ dailyStudy }) {
   )
 }
 
+const AYLAR = [
+  { value: '09', label: 'Eylül' }, { value: '10', label: 'Ekim' },
+  { value: '11', label: 'Kasım' }, { value: '12', label: 'Aralık' },
+  { value: '01', label: 'Ocak' }, { value: '02', label: 'Şubat' },
+  { value: '03', label: 'Mart' }, { value: '04', label: 'Nisan' },
+  { value: '05', label: 'Mayıs' }, { value: '06', label: 'Haziran' },
+]
+
 function KonuAnalizi({ dailyStudy }) {
   const bugun = new Date()
   const bugunAy = bugun.getMonth() + 1
@@ -256,16 +383,13 @@ function KonuAnalizi({ dailyStudy }) {
     const gelecek = tarihStr > bugunStr
     const bugunMu = tarihStr === bugunStr
     const sayi = takvimVerisi[gun] || 0
-
     if (gelecek || bugunMu) {
-      // Gelecek veya bugün — gri nötr
       if (sayi === 0) return '#e2e8f0'
       if (sayi < 30) return '#ccfbf1'
       if (sayi < 80) return '#5eead4'
       return '#0d9488'
     } else {
-      // Geçmiş gün
-      if (sayi === 0) return '#fecaca' // Kırmızı — ihmal
+      if (sayi === 0) return '#fecaca'
       if (sayi < 30) return '#ccfbf1'
       if (sayi < 80) return '#5eead4'
       return '#0d9488'
@@ -313,7 +437,6 @@ function KonuAnalizi({ dailyStudy }) {
         </div>
       )}
 
-      {/* Gelişmiş Aylık Takvim */}
       <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
           <h3 style={{ color: '#1e293b', margin: 0 }}>🗓️ Aylık Çalışma Takvimi</h3>
@@ -347,22 +470,6 @@ function KonuAnalizi({ dailyStudy }) {
               </div>
             )
           })}
-        </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#fecaca' }} />
-            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Giriş yapılmadı (geçmiş)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: '#e2e8f0' }} />
-            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Gelecek / Bugün boş</span>
-          </div>
-          {['#ccfbf1', '#5eead4', '#0d9488'].map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: c }} />
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>{i === 0 ? 'Az' : i === 1 ? 'Orta' : 'Çok'}</span>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -439,6 +546,7 @@ export default function StudentDetail({ studentId, onBack }) {
   const [student, setStudent] = useState(null)
   const [results, setResults] = useState([])
   const [dailyStudy, setDailyStudy] = useState([])
+  const [bransDenemeleri, setBransDenemeleri] = useState([])
   const [tab, setTab] = useState('denemeler')
   const [editResult, setEditResult] = useState(null)
   const [editData, setEditData] = useState({})
@@ -448,14 +556,16 @@ export default function StudentDetail({ studentId, onBack }) {
   useEffect(() => { fetchAll() }, [studentId])
 
   async function fetchAll() {
-    const [s, r, d] = await Promise.all([
+    const [s, r, d, b] = await Promise.all([
       supabase.from('students').select('*').eq('id', studentId).single(),
       supabase.from('exam_results').select('*, exams(name, date, type)').eq('student_id', studentId).order('exams(date)', { ascending: true }),
       supabase.from('daily_study').select('*').eq('student_id', studentId).order('date', { ascending: false }),
+      supabase.from('brans_denemeler').select('*').eq('student_id', studentId).order('tarih', { ascending: true }),
     ])
     setStudent(s.data)
     setResults(r.data || [])
     setDailyStudy(d.data || [])
+    setBransDenemeleri(b.data || [])
   }
 
   function openEdit(r) {
@@ -480,8 +590,7 @@ export default function StudentDetail({ studentId, onBack }) {
   const sonResult = tumDenemeler[tumDenemeler.length - 1]
   const trendData = tumDenemeler.map(r => ({ name: r.exams?.name, net: parseFloat(toplamNet(r).toFixed(2)), tip: r.exams?.type === 'common' ? 'Ortak' : 'Bireysel' }))
   const bransBarData = sonResult ? DERSLER.map(d => ({ ders: d.label, net: net(sonResult[`${d.key}_d`] || 0, sonResult[`${d.key}_y`] || 0) })) : []
-  const BRANS_RENKLER = { 'Türkçe': '#0d9488', 'Matematik': '#6366f1', 'Fen': '#f59e0b', 'İnkılap': '#ec4899', 'İngilizce': '#10b981', 'Din': '#8b5cf6' }
-  const bransTrend = DERSLER.map(d => ({ label: d.label, key: d.key, color: BRANS_RENKLER[d.label], data: tumDenemeler.map(r => ({ name: r.exams?.name, net: net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0) })) }))
+  const bransTrend = DERSLER.map(d => ({ label: d.label, key: d.key, color: BRANS_RENKLER[d.key], data: tumDenemeler.map(r => ({ name: r.exams?.name, net: net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0) })) }))
 
   if (!student) return <p style={{ color: '#94a3b8' }}>Yükleniyor...</p>
 
@@ -497,7 +606,13 @@ export default function StudentDetail({ studentId, onBack }) {
       </div>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {[{ key: 'denemeler', label: '📝 Denemeler' }, { key: 'grafik', label: '📈 Gelişim Grafiği' }, { key: 'konu', label: '🔍 Konu Analizi' }, { key: 'gunluk', label: '📅 Günlük Çalışma' }].map(t => (
+        {[
+          { key: 'denemeler', label: '📝 Denemeler' },
+          { key: 'grafik', label: '📈 Gelişim Grafiği' },
+          { key: 'brans_grafik', label: '🎯 Branş Grafikleri' },
+          { key: 'konu', label: '🔍 Konu Analizi' },
+          { key: 'gunluk', label: '📅 Günlük Çalışma' },
+        ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: '10px 20px', border: 'none', borderRadius: '10px', cursor: 'pointer', background: tab === t.key ? '#0d9488' : '#f1f5f9', color: tab === t.key ? '#fff' : '#64748b', fontWeight: tab === t.key ? '600' : '400', fontSize: '14px' }}>{t.label}</button>
         ))}
       </div>
@@ -541,6 +656,7 @@ export default function StudentDetail({ studentId, onBack }) {
         </div>
       )}
 
+      {/* DENEMELER TAB */}
       {tab === 'denemeler' && (
         <div>
           <h3 style={{ color: '#1e293b', marginBottom: '16px' }}>Tüm Deneme Sonuçları</h3>
@@ -581,6 +697,7 @@ export default function StudentDetail({ studentId, onBack }) {
         </div>
       )}
 
+      {/* GRAFİK TAB */}
       {tab === 'grafik' && (
         <div>
           {trendData.length < 2 ? <p style={{ color: '#94a3b8' }}>Grafik için en az 2 deneme gerekli.</p> : (
@@ -635,8 +752,23 @@ export default function StudentDetail({ studentId, onBack }) {
         </div>
       )}
 
+      {/* BRANŞ GRAFİKLERİ TAB — YENİ */}
+      {tab === 'brans_grafik' && (
+        <div>
+          <div style={{ marginBottom: '20px' }}>
+            <h3 style={{ color: '#1e293b', margin: '0 0 4px' }}>🎯 Branş Denemesi Gelişim Grafikleri</h3>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>
+              Öğrencinin kendi girdiği branş denemeleri — her branş için net trendi
+            </p>
+          </div>
+          <BransDenemeGrafik bransDenemeleri={bransDenemeleri} />
+        </div>
+      )}
+
+      {/* KONU TAB */}
       {tab === 'konu' && <KonuAnalizi dailyStudy={dailyStudy} />}
 
+      {/* GÜNLÜK TAB */}
       {tab === 'gunluk' && (
         <div>
           <h3 style={{ color: '#1e293b', marginBottom: '16px' }}>Günlük Çalışma Geçmişi</h3>
