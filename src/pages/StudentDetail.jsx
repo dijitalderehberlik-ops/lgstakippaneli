@@ -4,12 +4,12 @@ import { renk, font, buton } from '../styles'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ScatterChart, Scatter, ZAxis, ReferenceLine, PieChart, Pie, Legend } from 'recharts'
 
 const DERSLER = [
-  { key: 'turkce', label: 'Türkçe' },
-  { key: 'matematik', label: 'Matematik' },
-  { key: 'fen', label: 'Fen' },
-  { key: 'inkılap', label: 'İnkılap' },
-  { key: 'ingilizce', label: 'İngilizce' },
-  { key: 'din', label: 'Din' },
+  { key: 'turkce', label: 'Türkçe', maxSoru: 20 },
+  { key: 'matematik', label: 'Matematik', maxSoru: 20 },
+  { key: 'fen', label: 'Fen', maxSoru: 20 },
+  { key: 'inkılap', label: 'İnkılap', maxSoru: 10 },
+  { key: 'ingilizce', label: 'İngilizce', maxSoru: 10 },
+  { key: 'din', label: 'Din', maxSoru: 10 },
 ]
 
 const KONULAR = {
@@ -1153,7 +1153,14 @@ export default function StudentDetail({ studentId, onBack }) {
   const sonResult = tumDenemeler[tumDenemeler.length - 1]
   const trendData = tumDenemeler.map(r => ({ name: r.exams?.name, net: parseFloat(toplamNet(r).toFixed(2)), tip: r.exams?.type === 'common' ? 'Ortak' : 'Bireysel' }))
   const bransBarData = sonResult ? DERSLER.map(d => ({ ders: d.label, net: net(sonResult[`${d.key}_d`] || 0, sonResult[`${d.key}_y`] || 0) })) : []
-  const bransTrend = DERSLER.map(d => ({ label: d.label, key: d.key, color: BRANS_RENKLER[d.key], data: tumDenemeler.map(r => ({ name: r.exams?.name, net: net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0) })) }))
+  const bransTrend = DERSLER.map(d => ({
+    label: d.label, key: d.key, color: BRANS_RENKLER[d.key], maxSoru: d.maxSoru,
+    data: tumDenemeler.map(r => {
+      const n = net(r[`${d.key}_d`] || 0, r[`${d.key}_y`] || 0)
+      const yuzde = Math.round((n / d.maxSoru) * 100)
+      return { name: r.exams?.name, net: n, yuzde }
+    })
+  }))
 
   if (!student) return <p style={{ color: '#94a3b8' }}>Yükleniyor...</p>
 
@@ -1294,22 +1301,47 @@ export default function StudentDetail({ studentId, onBack }) {
               )}
               <h3 style={{ color: '#1e293b', marginBottom: '16px' }}>🔍 Branş Bazlı Gelişim</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px' }}>
-                {bransTrend.map(b => (
+                {bransTrend.map(b => {
+                  const maxSoru = b.maxSoru || 20
+                  const sonVeri = b.data[b.data.length - 1]
+                  const BransTip = ({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0].payload
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                        <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: '600' }}>{label}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '800', color: b.color }}>{d.net} Net</span>
+                          <span style={{ fontSize: '12px', background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>%{d.yuzde} Başarı</span>
+                        </div>
+                      </div>
+                    )
+                  }
+                  return (
                   <div key={b.key} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '20px' }}>
-                    <h4 style={{ color: '#1e293b', marginBottom: '16px', marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color, display: 'inline-block' }}></span>{b.label}
-                    </h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <h4 style={{ color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color, display: 'inline-block' }}></span>{b.label}
+                      </h4>
+                      {sonVeri && (
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '800', color: b.color }}>{sonVeri.net} Net</span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>%{sonVeri.yuzde}</span>
+                        </div>
+                      )}
+                    </div>
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={b.data}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} formatter={(v) => [v, 'Net']} />
+                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} domain={[0, maxSoru]} allowDecimals={false} />
+                        <Tooltip content={<BransTip />} />
                         <Line type="monotone" dataKey="net" stroke={b.color} strokeWidth={2} dot={{ fill: b.color, r: 4 }} activeDot={{ r: 6 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </>
           )}
