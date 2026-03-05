@@ -890,15 +890,15 @@ function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
   const [ozelBaslangic, setOzelBaslangic] = useState('')
   const [ozelBitis, setOzelBitis] = useState('')
 
-  const bugun = new Date().toISOString().split('T')[0]
+  const dun = offsetTarih(-1)  // Bugün grafikte 0 görünür, dün en sağda olsun
 
   const { baslangic, bitis } = useMemo(() => {
-    if (aralikTip === '7')  return { baslangic: offsetTarih(-6),  bitis: bugun }
-    if (aralikTip === '14') return { baslangic: offsetTarih(-13), bitis: bugun }
-    if (aralikTip === 'ay') return { baslangic: offsetTarih(-29), bitis: bugun }
+    if (aralikTip === '7')  return { baslangic: offsetTarih(-7),  bitis: dun }
+    if (aralikTip === '14') return { baslangic: offsetTarih(-14), bitis: dun }
+    if (aralikTip === 'ay') return { baslangic: offsetTarih(-30), bitis: dun }
     if (aralikTip === 'ozel' && ozelBaslangic && ozelBitis)
       return { baslangic: ozelBaslangic, bitis: ozelBitis }
-    return { baslangic: offsetTarih(-6), bitis: bugun }
+    return { baslangic: offsetTarih(-7), bitis: dun }
   }, [aralikTip, ozelBaslangic, ozelBitis])
 
   const tumGunler = useMemo(() => gunlerArasi(baslangic, bitis), [baslangic, bitis])
@@ -922,7 +922,8 @@ function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
   const graficVeri = useMemo(() => {
     return tumGunler.map(gun => {
       const gunSatirlari = tumSatirlar.filter(k => k.tarih === gun)
-      const row = { tarih: gun, tarihKisa: gun.slice(5), toplam: 0 }
+      const [yy, mm, dd] = gun.split('-')
+      const row = { tarih: gun, tarihKisa: `${dd}.${mm}`, toplam: 0 }
       DERS_FILTRELER.filter(f => f.key !== 'tumu').forEach(f => { row[f.key] = 0 })
       gunSatirlari.forEach(k => {
         row.toplam += k.soru
@@ -1075,6 +1076,15 @@ function GunlukSoruAnalizi({ dailyStudy, bransDenemeleri }) {
                 />
                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
                 <Tooltip content={<CustomTooltip />} />
+                {ozet.ort > 0 && (
+                  <ReferenceLine
+                    y={ozet.ort}
+                    stroke="#ef4444"
+                    strokeWidth={1.5}
+                    strokeDasharray="6 3"
+                    label={{ value: `Ort: ${ozet.ort}`, position: 'insideTopRight', fontSize: 11, fill: '#ef4444', fontWeight: '700' }}
+                  />
+                )}
                 {dersFiltire === 'tumu'
                   ? <Line type="monotone" dataKey="toplam" stroke="#0d9488" strokeWidth={2.5}
                       dot={{ r: 4, fill: '#0d9488', strokeWidth: 0 }} activeDot={{ r: 6 }} />
